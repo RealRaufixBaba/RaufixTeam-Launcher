@@ -62,8 +62,14 @@ jobs:
           set +e
           timeout 1800 gradle --no-daemon --max-workers=1 :app_mojo:assembleFullRelease --stacktrace 2>&1 | tee assemble.log
           EXIT_CODE=${PIPESTATUS[0]}
-          grep -iE "error|fail|exception|What went wrong|Caused by|Could not|unable|not found|UnknownDomainObject|MissingProperty|source set|SourceSet" assemble.log 2>/dev/null | head -15 | while IFS= read -r line; do echo "::error::[ASSEMBLE] $line"; done
           echo "::error::Assemble exit code: $EXIT_CODE"
+          {
+            echo "## Assemble Output"
+            echo ""
+            echo '```'
+            tail -80 assemble.log 2>/dev/null
+            echo '```'
+          } >> $GITHUB_STEP_SUMMARY
           exit $EXIT_CODE
 
       - name: Upload assemble debug log
