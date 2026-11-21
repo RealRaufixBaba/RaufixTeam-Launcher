@@ -300,28 +300,29 @@ class AssetTaskRegistrar {
     }
 }
 
-afterEvaluate {
-    def registrar = new AssetTaskRegistrar(project)
-
-    android.applicationVariants.configureEach { variant ->
-        registrar.setVariant(variant)
-
-        registrar.projectJarDependency project(":forge_installer"), "components/forge_installer"
-        registrar.projectJarDependency project(":NoBlocklist"), "components/noblocklist"
-
-        def flavorName = variant.productFlavors.empty ? "" : variant.productFlavors[0].name.toString()
-        if (flavorName.toLowerCase().contains("full")) {
-            registrar.jreRuntimeDependency 8, "components/jre"
-        }
-
-        def cacioJarUrl = "https://jitpack.io/com/github/MojoLauncher/%1\\$s/%2\\$s/%3\\$s/%2\\$s-%3\\$s%4\\$s.jar"
-
-        registrar.onlineJarDependency cacioJarUrl, "caciocavallo", "cacio-shared", "d0efb5aaba", "", "components/caciocavallo"
-        registrar.onlineJarDependency cacioJarUrl, "caciocavallo", "cacio-androidnw", "d0efb5aaba", "", "components/caciocavallo"
-
-        registrar.onlineJarDependency cacioJarUrl, "caciocavallo17", "cacio-tta", "-411454b006-1", "-jar-with-dependencies", "components/caciocavallo17"
-    }
-}
+// afterEvaluate temporarily disabled to isolate build issue
+// afterEvaluate {
+//     def registrar = new AssetTaskRegistrar(project)
+//
+//     android.applicationVariants.configureEach { variant ->
+//         registrar.setVariant(variant)
+//
+//         registrar.projectJarDependency project(":forge_installer"), "components/forge_installer"
+//         registrar.projectJarDependency project(":NoBlocklist"), "components/noblocklist"
+//
+//         def flavorName = variant.productFlavors.empty ? "" : variant.productFlavors[0].name.toString()
+//         if (flavorName.toLowerCase().contains("full")) {
+//             registrar.jreRuntimeDependency 8, "components/jre"
+//         }
+//
+//         def cacioJarUrl = "https://jitpack.io/com/github/MojoLauncher/%1\\$s/%2\\$s/%3\\$s/%2\\$s-%3\\$s%4\\$s.jar"
+//
+//         registrar.onlineJarDependency cacioJarUrl, "caciocavallo", "cacio-shared", "d0efb5aaba", "", "components/caciocavallo"
+//         registrar.onlineJarDependency cacioJarUrl, "caciocavallo", "cacio-androidnw", "d0efb5aaba", "", "components/caciocavallo"
+//
+//         registrar.onlineJarDependency cacioJarUrl, "caciocavallo17", "cacio-tta", "-411454b006-1", "-jar-with-dependencies", "components/caciocavallo17"
+//     }
+// }
 
 dependencies {
     implementation 'javax.annotation:javax.annotation-api:1.3.2'
