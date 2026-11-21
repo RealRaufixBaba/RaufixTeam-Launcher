@@ -10,7 +10,7 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        # jitpack.io removed temporarily to diagnose hang - com.github.* deps need it
+        maven { url "https://jitpack.io" } // com.github.* deps (caciocavallo, checkerboarddrawable, portrait-sdp/ssp, ExtendedView, android_gamepad_remapper, virtual-joystick-android, alsoft-android-aar)
     }
 }
 
