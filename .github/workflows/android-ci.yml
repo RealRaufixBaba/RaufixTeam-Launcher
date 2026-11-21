@@ -68,7 +68,15 @@ jobs:
 
       - name: Unit tests (Full Release)
         id: unit-test
-        run: gradle :app_mojo:testFullReleaseUnitTest --stacktrace --info || (echo "=== UNIT TEST FAILED ==="; exit 1)
+        run: gradle :app_mojo:testFullReleaseUnitTest --stacktrace --info 2>&1 | tee unit-test.log || (echo "=== UNIT TEST FAILED ==="; exit 1)
+
+      - name: Upload unit test debug log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-debug-log
+          path: unit-test.log
+          retention-days: 3
 
       - name: Lint (Full Release)
         id: lint
