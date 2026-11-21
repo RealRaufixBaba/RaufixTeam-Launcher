@@ -203,7 +203,9 @@ class AssetTaskRegistrar {
     }
 
     def setVariant(variant) {
-        def variantNameRaw = variant.name.toString()
+        def flavorName = variant.productFlavors.empty ? "" : variant.productFlavors[0].name.toString()
+        def buildTypeName = variant.buildType.name.toString()
+        def variantNameRaw = (flavorName + buildTypeName)
         variantName = variantNameRaw.capitalize()
         mergeAssetsTask = variant.getPreBuildProvider().get()
 
@@ -307,7 +309,8 @@ afterEvaluate {
         registrar.projectJarDependency project(":forge_installer"), "components/forge_installer"
         registrar.projectJarDependency project(":NoBlocklist"), "components/noblocklist"
 
-        if (variant.name.toString().toLowerCase().contains("full")) {
+        def flavorName = variant.productFlavors.empty ? "" : variant.productFlavors[0].name.toString()
+        if (flavorName.toLowerCase().contains("full")) {
             registrar.jreRuntimeDependency 8, "components/jre"
         }
 
