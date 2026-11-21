@@ -207,25 +207,12 @@ class AssetTaskRegistrar {
         def buildTypeName = variant.buildType.name.toString().capitalize()
         def variantNameRaw = (flavorName + buildTypeName)
         variantName = variantNameRaw.capitalize()
-        println "::error::[BUILD_DEBUG] setVariant: variant=$variantName raw=$variantNameRaw"
-        try {
-            mergeAssetsTask = project.tasks.named("pre${variantName}Build").get()
-            println "::error::[BUILD_DEBUG] mergeAssetsTask found for $variantName"
-        } catch (Exception e) {
-            println "::error::[BUILD_DEBUG] mergeAssetsTask FAILED for $variantName: ${e.message}"
-            throw e
-        }
+        mergeAssetsTask = project.tasks.named("pre${variantName}Build").get()
 
         targetAssetsDir = new File(project.projectDir, "build/intermediates/remote_asset_set/${variantNameRaw.toLowerCase()}/")
         createDirectories(targetAssetsDir)
 
-        try {
-            project.android.sourceSets[variantNameRaw].assets.srcDirs += targetAssetsDir.absolutePath
-            println "::error::[BUILD_DEBUG] sourceSets ok for $variantNameRaw"
-        } catch (Exception e) {
-            println "::error::[BUILD_DEBUG] sourceSets FAILED for $variantNameRaw: ${e.message}"
-            throw e
-        }
+        project.android.sourceSets[variantNameRaw].assets.srcDirs += targetAssetsDir.absolutePath
     }
 
     static def createDirectories(File location) {
@@ -318,29 +305,21 @@ afterEvaluate {
 
     android.applicationVariants.configureEach { variant ->
         registrar.setVariant(variant)
-        println "::error::[BUILD_DEBUG] configureEach: variant=$variantName"
 
         registrar.projectJarDependency project(":forge_installer"), "components/forge_installer"
-        println "::error::[BUILD_DEBUG] forge_installer done for $variantName"
-
         registrar.projectJarDependency project(":NoBlocklist"), "components/noblocklist"
-        println "::error::[BUILD_DEBUG] NoBlocklist done for $variantName"
 
         def flavorName = variant.productFlavors.empty ? "" : variant.productFlavors[0].name.toString()
         if (flavorName.toLowerCase().contains("full")) {
             registrar.jreRuntimeDependency 8, "components/jre"
         }
-        println "::error::[BUILD_DEBUG] jre done for $variantName"
 
         def cacioJarUrl = "https://jitpack.io/com/github/MojoLauncher/%1\\$s/%2\\$s/%3\\$s/%2\\$s-%3\\$s%4\\$s.jar"
 
         registrar.onlineJarDependency cacioJarUrl, "caciocavallo", "cacio-shared", "d0efb5aaba", "", "components/caciocavallo"
-        println "::error::[BUILD_DEBUG] cacio-shared done for $variantName"
         registrar.onlineJarDependency cacioJarUrl, "caciocavallo", "cacio-androidnw", "d0efb5aaba", "", "components/caciocavallo"
-        println "::error::[BUILD_DEBUG] cacio-androidnw done for $variantName"
 
         registrar.onlineJarDependency cacioJarUrl, "caciocavallo17", "cacio-tta", "-411454b006-1", "-jar-with-dependencies", "components/caciocavallo17"
-        println "::error::[BUILD_DEBUG] cacio-tta done for $variantName"
     }
 }
 
