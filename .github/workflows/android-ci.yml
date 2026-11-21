@@ -60,14 +60,15 @@ jobs:
       - name: Assemble Full Release APK
         run: |
           set +e
-          timeout 1800 gradle --no-daemon --max-workers=1 :app_mojo:assembleFullRelease --stacktrace 2>&1 | tee assemble.log
+          set -x
+          timeout 1800 gradle --no-daemon --max-workers=1 :app_mojo:assembleFullRelease --stacktrace --info 2>&1 | tee assemble.log
           EXIT_CODE=${PIPESTATUS[0]}
           echo "::error::Assemble exit code: $EXIT_CODE"
           if [ -f assemble.log ] && [ -s assemble.log ]; then
-            echo "::error::=== ASSEMBLE LOG (last 40 lines) ==="
-            tail -40 assemble.log | while IFS= read -r line; do
-              echo "::error::${line}"
-            done
+            echo "::error::=== ASSEMBLE LOG ERROR LINES ==="
+            grep -iE "error|cannot find|does not exist|exception|failed|caused by|unable" assemble.log | head -40 | sed 's/^/::error:: /'
+            echo "::error::=== ASSEMBLE LOG TAIL ==="
+            tail -30 assemble.log | sed 's/^/::error:: /'
           else
             echo "::error::=== ASSEMBLE LOG IS EMPTY OR MISSING ==="
           fi
