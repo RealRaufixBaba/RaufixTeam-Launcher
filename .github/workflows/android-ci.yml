@@ -62,8 +62,8 @@ jobs:
           set +e
           timeout 600 gradle --no-daemon --max-workers=1 --info :app_mojo:assembleFullRelease --stacktrace > assemble.log 2>&1
           EXIT_CODE=$?
-          # Echo first 100 lines as error annotations
-          head -100 assemble.log 2>/dev/null | while IFS= read -r line; do echo "::error::[ASSEMBLE] $line"; done
+          # Echo first 200 lines as error annotations
+          head -200 assemble.log 2>/dev/null | while IFS= read -r line; do echo "::error::[ASSEMBLE] $line"; done
           echo "::error::Assemble exit code: $EXIT_CODE"
           exit $EXIT_CODE
 
