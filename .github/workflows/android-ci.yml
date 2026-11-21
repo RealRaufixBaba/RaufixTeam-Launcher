@@ -79,7 +79,6 @@ jobs:
             echo '```'
           } >> $GITHUB_STEP_SUMMARY
           exit $EXIT_CODE
-          exit $EXIT_CODE
 
       - name: Upload assemble debug log
         if: always()
