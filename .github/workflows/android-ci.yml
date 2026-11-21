@@ -66,6 +66,21 @@ jobs:
       - name: Gradle version check
         run: gradle --version
 
+      - name: Debug: list Gradle subprojects
+        run: |
+          set +e
+          gradle :app_mojo:projects --console=plain > gradle-projects.log 2>&1
+          echo "EXIT_CODE=$?" >> gradle-projects.log
+          cat gradle-projects.log
+          echo "::notice::Gradle projects log captured above"
+
+      - name: Debug: list submodule contents
+        run: |
+          echo "=== NoBlocklist ==="; ls NoBlocklist/ 2>/dev/null
+          echo "=== glfw/jni_bindings ==="; ls glfw/jni_bindings/ 2>/dev/null
+          echo "=== sdl/jni_bindings ==="; ls sdl/jni_bindings/ 2>/dev/null
+          echo "=== mojoexec/jni_bindings ==="; ls mojoexec/jni_bindings/ 2>/dev/null
+
       - name: Unit tests (Full Release)
         id: unit-test
         run: |
