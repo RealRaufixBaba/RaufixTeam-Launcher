@@ -13,8 +13,6 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  GRADLE_VERSION: 8.14.5
-  COMPILE_SDK: 36
   NDK_VERSION: 29.0.14206865
   JAVA_VERSION: 17
 
@@ -29,27 +27,31 @@ jobs:
           fetch-depth: 0
 
       - name: Setup JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
           cache: gradle
 
-      - name: Setup Android SDK + NDK
-        uses: android-actions/setup-android@v4
-        with:
-          accept-android-sdk-licenses: true
-          packages: |
-            platform-tools
-            platforms;android-36
-            build-tools;36.0.0
-            ndk;${{ env.NDK_VERSION }}
-            cmake;3.22.1
+      - name: Install Android SDK command-line tools
+        run: |
+          mkdir -p $HOME/android-sdk/cmdline-tools
+          cd $HOME/android-sdk
+          curl -sL -o sdk-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -o -q sdk-tools.zip -d cmdline-tools
+          mv cmdline-tools/cmdline-tools cmdline-tools/latest
+          echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> $GITHUB_ENV
+          echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
+          echo "PATH=$HOME/android-sdk/cmdline-tools/latest/bin:$PATH" >> $GITHUB_ENV
+
+      - name: Install Android SDK packages (platform 36, NDK, build-tools, cmake)
+        run: |
+          yes | sdkmanager --sdk_root=$ANDROID_SDK_ROOT "platform-tools" "platforms;android-36" "build-tools;36.0.0" "ndk;${{ env.NDK_VERSION }}" "cmake;3.22.1"
 
       - name: Write local.properties
         run: |
-          echo "sdk.dir=${{ env.ANDROID_SDK_ROOT }}" > local.properties
-          echo "ndk.dir=${{ env.ANDROID_SDK_ROOT }}/ndk/${{ env.NDK_VERSION }}" >> local.properties
+          echo "sdk.dir=${ANDROID_SDK_ROOT}" > local.properties
+          echo "ndk.dir=${ANDROID_SDK_ROOT}/ndk/${{ env.NDK_VERSION }}" >> local.properties
           cat local.properties
 
       - name: Make gradlew executable
@@ -107,26 +109,30 @@ jobs:
           submodules: recursive
 
       - name: Setup JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
-      - name: Setup Android SDK + NDK
-        uses: android-actions/setup-android@v4
-        with:
-          accept-android-sdk-licenses: true
-          packages: |
-            platform-tools
-            platforms;android-36
-            build-tools;36.0.0
-            ndk;${{ env.NDK_VERSION }}
-            cmake;3.22.1
+      - name: Install Android SDK command-line tools
+        run: |
+          mkdir -p $HOME/android-sdk/cmdline-tools
+          cd $HOME/android-sdk
+          curl -sL -o sdk-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -o -q sdk-tools.zip -d cmdline-tools
+          mv cmdline-tools/cmdline-tools cmdline-tools/latest
+          echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> $GITHUB_ENV
+          echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
+          echo "PATH=$HOME/android-sdk/cmdline-tools/latest/bin:$PATH" >> $GITHUB_ENV
+
+      - name: Install Android SDK packages (platform 36, NDK, build-tools, cmake)
+        run: |
+          yes | sdkmanager --sdk_root=$ANDROID_SDK_ROOT "platform-tools" "platforms;android-36" "build-tools;36.0.0" "ndk;${{ env.NDK_VERSION }}" "cmake;3.22.1"
 
       - name: Write local.properties
         run: |
-          echo "sdk.dir=${{ env.ANDROID_SDK_ROOT }}" > local.properties
-          echo "ndk.dir=${{ env.ANDROID_SDK_ROOT }}/ndk/${{ env.NDK_VERSION }}" >> local.properties
+          echo "sdk.dir=${ANDROID_SDK_ROOT}" > local.properties
+          echo "ndk.dir=${ANDROID_SDK_ROOT}/ndk/${{ env.NDK_VERSION }}" >> local.properties
 
       - name: Make gradlew executable
         run: chmod +x gradlew
