@@ -57,6 +57,10 @@ jobs:
           echo "GRADLE_HOME=$HOME/gradle-${GRADLE_VERSION}" >> $GITHUB_ENV
           echo "$HOME/gradle-${GRADLE_VERSION}/bin" >> $GITHUB_PATH
 
+      - name: Dry-run assemble (check task graph)
+        run: |
+          gradle --no-daemon :app_mojo:assembleFullRelease --dry-run --console=plain 2>&1 | head -50
+
       - name: Assemble Full Release APK
         run: |
           set +e
