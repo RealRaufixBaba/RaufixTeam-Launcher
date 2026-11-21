@@ -1,0 +1,769 @@
+package git.raufixteam.launcher.utils.jre;
+
+import android.content.Context;
+import android.util.ArrayMap;
+import android.util.Log;
+import android.widget.Toast;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.appcompat.app.AppCompatActivity;
+
+import git.raufixteam.launcher.Architecture;
+import git.raufixteam.launcher.JVersionList;
+import git.raufixteam.launcher.Logger;
+import git.raufixteam.launcher.Tools;
+import git.raufixteam.launcher.authenticator.accounts.Account;
+import git.raufixteam.launcher.content.ModrinthContentInstaller;
+import git.raufixteam.launcher.diagnostics.GraphicsAdvisor;
+import git.raufixteam.launcher.game.GameActivity;
+import git.raufixteam.launcher.game.renderer.def.Renderers;
+import git.raufixteam.launcher.game.renderer.impl.GLESRenderSpec;
+import git.raufixteam.launcher.instances.Instance;
+import git.raufixteam.launcher.instances.InstanceHealthInspector;
+import git.raufixteam.launcher.instances.InstanceManager;
+import git.raufixteam.launcher.metadata.JavaRuntimeAdvisor;
+import git.raufixteam.launcher.metadata.MojangVersionProvider;
+import git.raufixteam.launcher.performance.GameOptimizer;
+import git.raufixteam.launcher.security.LogRedactor;
+import git.raufixteam.launcher.servers.ServerListManager;
+import git.raufixteam.launcher.utils.DownloadUtils;
+import git.raufixteam.launcher.utils.lifecycle.LifecycleAwareAlertDialog;
+import git.raufixteam.launcher.multirt.MultiRTUtils;
+import git.raufixteam.launcher.multirt.Runtime;
+import git.raufixteam.launcher.prefs.LauncherPreferences;
+import git.raufixteam.launcher.game.renderer.GameRenderer;
+import git.raufixteam.launcher.game.renderer.RenderSpec;
+import git.raufixteam.launcher.utils.DateUtils;
+import git.raufixteam.launcher.utils.FileUtils;
+import git.raufixteam.launcher.utils.GpuUtils;
+import git.raufixteam.launcher.utils.GameOptionsUtils;
+import git.raufixteam.launcher.utils.JREUtils;
+import git.raufixteam.launcher.utils.JSONUtils;
+import git.raufixteam.launcher.utils.MCOptionUtils;
+import git.raufixteam.launcher.utils.OldVersionsUtils;
+
+import java.io.File;
+import java.io.IOException;
+import java.text.ParseException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Date;
+import java.util.List;
+import java.util.Map;
+
+import git.raufixteam.launcher.R;
+
+public class GameRunner {
+    /**
+     * Optimization mods based on Sodium can mitigate the render distance issue. Check if Sodium
+     * or its derivative is currently installed to skip the render distance check.
+     * @param gameDir current game directory
+     * @return whether sodium or a sodium-based mod is installed
+     */
+    private static boolean hasSodium(File gameDir) {
+        File modsDir = new File(gameDir, "mods");
+        File[] mods = modsDir.listFiles(file -> file.isFile() && file.getName().endsWith(".jar"));
+        if(mods == null) return false;
+        for(File file : mods) {
+            String name = file.getName();
+            if(name.contains("sodium") ||
+                    name.contains("embeddium") ||
+                    name.contains("rubidium")) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Check if Angelica is currently installed to allow usage of LTW
+     * @param gameDir current game directory
+     * @return whether Angelica is installed
+     */
+    private static boolean hasAngelica(File gameDir) {
+        File modsDir = new File(gameDir, "mods");
+        File[] mods = modsDir.listFiles(file -> file.isFile() && file.getName().endsWith(".jar"));
+        if(mods == null) return false;
+        for(File file : mods) {
+            String name = file.getName();
+            if(name.contains("angelica")) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Initialize OpenGL and do checks to see if the GPU of the device is affected by the render
+     * distance issue.
+
+     * Currently only checks whether the user has an Adreno GPU capable of OpenGL ES 3.
+
+     * This issue is caused by a very severe limit on the amount of GL buffer names that could be allocated
+     * by the Adreno properietary GLES driver.
+
+     * @return whether the GPU is affected by the Large Thin Wrapper render distance issue on vanilla
+     */
+
+    private static boolean affectedByRenderDistanceIssue(JVersionList.Version version) throws ParseException {
+        if(LauncherPreferences.PREF_USE_ANGLE) return false;
+        GpuUtils.GLInfo info = GpuUtils.getGlInfo();
+        return info.isAdreno() &&
+                info.glesMajorVersion >= 3 &&
+                // 1.21.5 fixes the RD issue, released on march 25 2025
+                DateUtils.dateBefore(DateUtils.getOriginalReleaseDate(version), 2025, 2, 25);
+    }
+
+    private static boolean checkRenderDistance(JVersionList.Version version, File gamedir) throws ParseException {
+        if(!affectedByRenderDistanceIssue(version)) return false;
+        if(hasSodium(gamedir)) return false;
+        try {
+            MCOptionUtils.load();
+        }catch (Exception e) {
+            Log.e("Tools", "Failed to load config", e);
+        }
+        int renderDistance = GameOptionsUtils.parseIntDefault(MCOptionUtils.get("renderDistance"),12);
+        // 7 is the render distance "magic number" above which MC creates too many buffers
+        // for Adreno's OpenGL ES implementation
+        return renderDistance > 7;
+    }
+
+    private static boolean isGl4esCompatible(JVersionList.Version version) throws Exception{
+        return DateUtils.dateBefore(DateUtils.getOriginalReleaseDate(version), 2025, 1, 7);
+    }
+
+    private static boolean isCompatContext(JVersionList.Version version) throws Exception{
+        // Day before the release date of 21w10a, the first OpenGL 3 Core Minecraft version
+        return DateUtils.dateBefore(DateUtils.getOriginalReleaseDate(version), 2021, 3, 9);
+    }
+
+    private static boolean showDialog(AppCompatActivity activity, int message) throws InterruptedException {
+        LifecycleAwareAlertDialog.DialogCreator dialogCreator = ((alertDialog, dialogBuilder) ->
+                dialogBuilder.setMessage(activity.getString(message))
+                        .setCancelable(false)
+                        .setPositiveButton(android.R.string.ok, (d, w)->{}));
+        return LifecycleAwareAlertDialog.haltOnDialog(activity.getLifecycle(), activity, dialogCreator);
+    }
+
+    // Autoswitch to provided renderer if supported, otherwise - crash with resId dialog message
+    private static void switchRendererIfSupported(boolean support,
+                                                  RenderSpec renderer,
+                                                  GameRenderer gameRenderer,
+                                                  Instance instance,
+                                                  AppCompatActivity activity,
+                                                  int resId) throws InterruptedException, IOException {
+        if(support) {
+            instance.renderer = renderer.tag();
+            instance.write();
+            gameRenderer.setCurrentRenderer(renderer);
+        }else {
+            showDialog(activity, resId);
+            System.exit(0);
+        }
+    }
+
+    /** Result snapshot returned by silent pre-launch auto-advisor execution. */
+    public static final class PreFlightReport {
+        public final int requiredJavaMajor;
+        @NonNull public final String selectedRuntimeName;
+        @NonNull public final String selectedRendererId;
+        @NonNull public final String optimizerMode;
+        public final int appliedScalePercent;
+        public final int repairedIssuesCount;
+        @NonNull public final String summary;
+
+        public PreFlightReport(int requiredJavaMajor,
+                               @NonNull String selectedRuntimeName,
+                               @NonNull String selectedRendererId,
+                               @NonNull String optimizerMode,
+                               int appliedScalePercent,
+                               int repairedIssuesCount,
+                               @NonNull String summary) {
+            this.requiredJavaMajor = requiredJavaMajor;
+            this.selectedRuntimeName = selectedRuntimeName;
+            this.selectedRendererId = selectedRendererId;
+            this.optimizerMode = optimizerMode;
+            this.appliedScalePercent = appliedScalePercent;
+            this.repairedIssuesCount = repairedIssuesCount;
+            this.summary = summary;
+        }
+    }
+
+    /**
+     * Runs {@link InstanceHealthInspector}, {@link JavaRuntimeAdvisor}, {@link GraphicsAdvisor},
+     * and {@link GameOptimizer} silently before launching {@link GameActivity} so missing folders,
+     * crash-loop renderers, mismatched JRE versions, and untuned GPU/preset settings self-heal
+     * without ever overwriting an explicit Pro-Mode user lock.
+     */
+    @NonNull
+    public static PreFlightReport runPreFlightAdvisors(@NonNull Context context,
+                                                       @NonNull Instance instance,
+                                                       @Nullable String resolvedVersionId) {
+        String versionToken = Tools.isValidString(resolvedVersionId)
+                ? resolvedVersionId : instance.versionId;
+
+        // 1. Resolve required Java major version (8 for <=1.16.5, 17 for 1.17-1.20.4, 21 for 1.20.5+, 25 for 26+)
+        JVersionList.Version localVerJson = null;
+        if (Tools.isValidString(versionToken)) {
+            try {
+                File verFile = new File(Tools.DIR_HOME_VERSION, versionToken + "/" + versionToken + ".json");
+                if (verFile.isFile()) {
+                    localVerJson = Tools.getVersionInfo(versionToken);
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+        int requiredJava = JavaRuntimeAdvisor.resolveRequiredJava(localVerJson, versionToken);
+
+        // 2. InstanceHealthInspector: audit & silently repair missing subfolders / dangling control refs / crash loops
+        int repairedCount = 0;
+        try {
+            String curRtName = Tools.getSelectedRuntime(instance);
+            Runtime curRt = curRtName != null ? MultiRTUtils.read(curRtName) : null;
+            int selectedJavaMajor = curRt != null ? curRt.javaVersion : 0;
+            File versionsDir = Tools.DIR_HOME_VERSION != null ? new File(Tools.DIR_HOME_VERSION) : null;
+            File controlsDir = Tools.CTRLMAP_PATH != null ? new File(Tools.CTRLMAP_PATH) : null;
+
+            InstanceManager.HealthReport health = InstanceHealthInspector.checkHealth(
+                    instance, versionsDir, controlsDir, requiredJava, selectedJavaMajor);
+            if (health.status != InstanceManager.HealthStatus.HEALTHY || !health.repairableActions.isEmpty()) {
+                List<String> repairs = InstanceHealthInspector.repairInstance(instance, controlsDir);
+                repairedCount = repairs.size();
+            } else {
+                // Always guarantee standard folders exist before launch
+                File gameDir = instance.getGameDirectory();
+                if (gameDir != null && !new File(gameDir, "config").isDirectory()) {
+                    InstanceHealthInspector.repairInstance(instance, controlsDir);
+                }
+            }
+        } catch (Throwable t) {
+            Log.w("GameRunner", "InstanceHealthInspector pre-flight skipped: " + t.getMessage());
+        }
+
+        // 3. JavaRuntimeAdvisor: auto-select optimal installed JRE unless locked in Pro Mode
+        String chosenRtName = "";
+        try {
+            List<Runtime> installed = MultiRTUtils.getRuntimes();
+            String curName = Tools.getSelectedRuntime(instance);
+            Runtime current = curName != null ? MultiRTUtils.read(curName) : null;
+            String deviceArch = Architecture.archAsString(Architecture.getDeviceArchitecture());
+            Runtime selected = JavaRuntimeAdvisor.autoSelectForLaunch(
+                    instance, requiredJava, current, installed, deviceArch);
+            if (selected != null) {
+                chosenRtName = selected.name;
+                if (!instance.runtimeLocked && !selected.name.equals(instance.selectedRuntime)) {
+                    instance.selectedRuntime = selected.name;
+                    instance.maybeWrite();
+                }
+            } else if (curName != null) {
+                chosenRtName = curName;
+            }
+        } catch (Throwable t) {
+            Log.w("GameRunner", "JavaRuntimeAdvisor pre-flight skipped: " + t.getMessage());
+        }
+
+        // 4. GraphicsAdvisor + GpuUtils: auto-select Turnip+Zink/LTW on Adreno, LTW/ANGLE/GL4ES on Mali/PowerVR
+        String chosenRenderer = instance.getLaunchRenderer();
+        try {
+            GraphicsAdvisor.RendererPreset gpuPreset =
+                    GraphicsAdvisor.ensureOptimalInstanceRenderer(context, instance, versionToken);
+            chosenRenderer = Tools.isValidString(instance.renderer)
+                    ? instance.renderer : gpuPreset.rendererId;
+        } catch (Throwable t) {
+            Log.w("GameRunner", "GraphicsAdvisor pre-flight skipped: " + t.getMessage());
+        }
+
+        // 5. GameOptimizer: resolve Simple-Mode performance preset & per-instance resolution scale
+        String optMode = resolveInstanceOptimizerMode(instance);
+        int scalePercent = instance.getEffectiveResolutionScalePercent();
+        if (instance.resolutionScalePercent >= 50 && instance.resolutionScalePercent <= 100) {
+            LauncherPreferences.PREF_SCALE_FACTOR = instance.resolutionScalePercent / 100f;
+        } else if (Instance.PRESET_BATTERY.equals(instance.performancePreset)) {
+            scalePercent = Math.min(scalePercent, 75);
+            LauncherPreferences.PREF_SCALE_FACTOR = scalePercent / 100f;
+            LauncherPreferences.PREF_FORCE_VSYNC = true;
+            LauncherPreferences.PREF_SUSTAINED_PERFORMANCE = false;
+        } else if (Instance.PRESET_MAX_FPS.equals(instance.performancePreset)) {
+            LauncherPreferences.PREF_FORCE_VSYNC = false;
+            LauncherPreferences.PREF_SUSTAINED_PERFORMANCE = true;
+        }
+
+        // 6. Fulfill deferred one-shot Zero-Lag FPS Pack installation if queued by Onboarding/OptiFine flow
+        if (instance.pendingAutoFpsPack && (ModrinthContentInstaller.extractModLoader(versionToken) != null
+                || Instance.supportsFabricLoader(Instance.extractCleanMinecraftVersion(versionToken)))) {
+            boolean wantIris = instance.pendingAutoIncludeIris;
+            instance.pendingAutoFpsPack = false;
+            instance.pendingAutoIncludeIris = false;
+            instance.maybeWrite();
+            try {
+                ModrinthContentInstaller.InstallSummary fpsSum =
+                        ModrinthContentInstaller.installZeroLagFpsPack(instance, wantIris, null);
+                Logger.appendToLogSafe("Zyrox Pre-Flight: " + fpsSum.message);
+            } catch (Throwable t) {
+                Logger.appendToLogSafe("Zyrox Pre-Flight: deferred FPS pack skipped (" + t.getMessage() + ")");
+            }
+        }
+
+        String summary = "Java " + requiredJava + " (" + (chosenRtName.isEmpty() ? "auto" : chosenRtName)
+                + "), renderer=" + chosenRenderer + ", mode=" + optMode
+                + ", scale=" + scalePercent + "%, repairs=" + repairedCount;
+        Logger.appendToLogSafe("Zyrox Pre-Flight Advisor: " + summary);
+        return new PreFlightReport(
+                requiredJava, chosenRtName, chosenRenderer, optMode, scalePercent, repairedCount, summary);
+    }
+
+    /** Maps per-instance Simple-Mode preset cleanly onto {@link GameOptimizer} execution modes. */
+    @NonNull
+    public static String resolveInstanceOptimizerMode(@Nullable Instance instance) {
+        if (instance != null && Tools.isValidString(instance.performancePreset)) {
+            if (Instance.PRESET_MAX_FPS.equals(instance.performancePreset)) {
+                return GameOptimizer.MODE_MAX_FPS;
+            }
+            if (Instance.PRESET_BATTERY.equals(instance.performancePreset)
+                    || Instance.PRESET_BALANCED.equals(instance.performancePreset)) {
+                return GameOptimizer.MODE_BALANCED;
+            }
+        }
+        return GameOptimizer.normalizeMode(LauncherPreferences.PREF_ZYROX_OPTIMIZER_MODE);
+    }
+
+    public static void launchGame(final AppCompatActivity activity, Account account,
+                                  Instance instance, String versionId, File[] classpath, GameRenderer gameRenderer) throws Throwable {
+        if(!performAuthPing(activity, account)) account = account.toLocal();
+
+        // Silent pre-flight check (InstanceHealthInspector + JavaRuntimeAdvisor + GraphicsAdvisor + GameOptimizer)
+        PreFlightReport preFlight = runPreFlightAdvisors(activity, instance, versionId);
+        if (!instance.rendererLocked && Tools.isValidString(instance.renderer)) {
+            RenderSpec advisedSpec = GameRenderer.getKnownRenderer(instance.renderer);
+            if (advisedSpec != null && advisedSpec.compatibleDevice(activity)) {
+                gameRenderer.setCurrentRenderer(advisedSpec);
+            }
+        }
+
+        int freeDeviceMemory = Tools.getFreeDeviceMemory(activity);
+        int localeString;
+        int freeAddressSpace = Architecture.is32BitsDevice() ? Tools.getMaxContinuousAddressSpaceSize() : -1;
+        Log.i("MemStat", "Free RAM: " + freeDeviceMemory + " Addressable: " + freeAddressSpace);
+        boolean showAddressMemoryWarning = freeDeviceMemory > freeAddressSpace && freeAddressSpace != -1;
+        if(showAddressMemoryWarning) {
+            freeDeviceMemory = freeAddressSpace;
+            localeString = R.string.address_memory_warning_msg;
+        } else {
+            localeString = R.string.memory_warning_msg;
+        }
+
+        final int effectiveRamMb = instance.getEffectiveRamAllocationMb();
+        if(effectiveRamMb > freeDeviceMemory && (showAddressMemoryWarning || LauncherPreferences.PREF_SHOW_MEMORY_WARNING_DIALOG)) {
+            int finalDeviceMemory = freeDeviceMemory;
+            LifecycleAwareAlertDialog.DialogCreator dialogCreator = (dialog, builder) -> {
+                builder.setMessage(activity.getString(localeString, finalDeviceMemory, effectiveRamMb))
+                        .setPositiveButton(android.R.string.ok, (d, w) -> {
+                        });
+
+                if (!showAddressMemoryWarning) {
+                    builder.setNegativeButton(R.string.option_do_not_show_again, (d, w) -> {
+                        LauncherPreferences.DEFAULT_PREF.edit().putBoolean("showMemoryWarning", false).apply();
+                        Toast.makeText(activity, R.string.notification_permission_toast, Toast.LENGTH_SHORT).show();
+                    });
+                }
+            };
+
+
+                if (LifecycleAwareAlertDialog.haltOnDialog(activity.getLifecycle(), activity, dialogCreator)) {
+                    return; // If the dialog's lifecycle has ended, return without
+                    // actually launching the game, thus giving us the opportunity
+                    // to start after the activity is shown again
+                }
+            }
+        File gamedir = instance.getGameDirectory();
+        GameActivity.reportLoadingStage(R.string.zyrox_loading_resources);
+        JVersionList.Version versionInfo = Tools.getVersionInfo(versionId);
+        // We don't need the library list, the asset index, client download info for the code below
+        versionInfo.libraries = null;
+        versionInfo.downloads = null;
+
+        RenderSpec renderer = gameRenderer.getCurrentRenderer();
+
+        if(!versionInfo.disableRendererChecks) {
+            // Switch renderer to GL4ES when running a compat context version on LTW
+            if(isCompatContext(versionInfo) && !hasAngelica(gamedir) && renderer instanceof GLESRenderSpec.LTWRenderSpec) {
+                switchRendererIfSupported(true, GameRenderer.getKnownRenderer(Renderers.GL4ES_RENDERER), gameRenderer, instance, activity, 0);
+            }
+
+            boolean isGl4es = renderer instanceof GLESRenderSpec.GL4ESRenderSpec;
+            RenderSpec ltw = GameRenderer.getKnownRenderer(Renderers.LTW_RENDERER);
+            boolean ltwSupported = ltw != null && ltw.compatibleDevice(activity);
+            // Block Sodium from running with GL4ES on 1.17+
+            if(!isCompatContext(versionInfo) && isGl4es && hasSodium(gamedir)) {
+                switchRendererIfSupported(ltwSupported, ltw, gameRenderer, instance, activity, R.string.compat_sodium_not_supported);
+            }
+
+            // Switch renderer to LTW when running 1.21.5
+            if(!isGl4esCompatible(versionInfo) && isGl4es) {
+                switchRendererIfSupported(ltwSupported, ltw, gameRenderer, instance, activity, R.string.compat_version_not_supported);
+            }
+        }
+
+        // Re-read active renderer after compatibility auto-switches
+        renderer = gameRenderer.getCurrentRenderer();
+        boolean isLtw = renderer instanceof GLESRenderSpec.LTWRenderSpec;
+
+        if(isLtw && checkRenderDistance(versionInfo, gamedir)) {
+            if(showDialog(activity, R.string.ltw_render_distance_warning_msg)) return;
+            // If the code goes here, it means that the user clicked "OK". Fix the render distance.
+            try {
+                MCOptionUtils.set("renderDistance", "7");
+                MCOptionUtils.save();
+            }catch (Exception e) {
+                Log.e("Tools", "Failed to fix render distance setting", e);
+            }
+        }
+
+        GameOptionsUtils.fixOptions(isLtw);
+
+        if(isLtw && GpuUtils.getGlInfo().forcedMsaa) {
+            if(showDialog(activity, R.string.ltw_4x_msaa_warning_msg)) return;
+        }
+
+        GameActivity.reportLoadingStage(R.string.zyrox_loading_runtime);
+        int requiredJavaVersion = MojangVersionProvider.resolveRequiredJavaVersion(versionInfo);
+
+        Runtime runtime = MultiRTUtils.forceReread(pickRuntime(instance, requiredJavaVersion));
+
+        // Pre-process specific files
+        disableSplash(gamedir);
+        List<String> launchArgs = getMoJsonClientArgs(account, versionInfo, gamedir);
+
+        // Optional user-requested Server Manager quick-connect launch flags
+        String quickConnectServer = ServerListManager.consumePendingQuickConnect();
+        if (quickConnectServer != null) {
+            // If quickConnectServer originated from a P2P ZYX Room, bind a live tunnel inside :game
+            quickConnectServer = git.raufixteam.launcher.servers.ZyroxRoomBridge
+                    .ensurePendingTunnelInGameProcess(quickConnectServer);
+            try {
+                Date relDate = DateUtils.getOriginalReleaseDate(versionInfo);
+                // --quickPlayMultiplayer was introduced in Minecraft 1.20 (released 2023-06-07)
+                boolean modernQuickPlay = relDate != null && !DateUtils.dateBefore(relDate, 2023, 5, 6);
+                ServerListManager.appendQuickConnectArgs(launchArgs, quickConnectServer, modernQuickPlay);
+            } catch (Exception e) {
+                Log.w("GameRunner", "Skipping invalid quick-connect server target: " + e.getMessage());
+            }
+        }
+
+        // Select the appropriate openGL version
+        OldVersionsUtils.selectOpenGlVersion(versionInfo);
+
+        ArrayList<String> launchClassPath = new ArrayList<>(classpath.length);
+        for(int i = 0; i < classpath.length; i++) {
+            File classpathEntry = classpath[i];
+            String entryPath = classpathEntry.getAbsolutePath();
+            if(!classpathEntry.exists()) {
+                Log.w("GameRunner", "Skipped classpath entry " + entryPath + " because it is missing");
+            }
+            launchClassPath.add(entryPath);
+            // Unreference the classpath entry to avoid retaining it on heap
+            classpath[i] = null;
+        }
+        launchClassPath.trimToSize();
+
+        List<String> javaArgList = new ArrayList<>();
+
+        if (versionInfo.logging != null && versionInfo.logging.client != null && versionInfo.logging.client.file != null) {
+            String configFile = Tools.DIR_DATA + "/security/" + versionInfo.logging.client.file.id.replace("client", "log4j-rce-patch");
+            if (!new File(configFile).exists()) {
+                configFile = Tools.DIR_GAME_NEW + "/" + versionInfo.logging.client.file.id;
+            }
+            javaArgList.add("-Dlog4j.configurationFile=" + configFile);
+        }
+
+        versionInfo.logging = null;
+
+        File versionSpecificNativesDir = new File(Tools.DIR_CACHE, "natives/"+versionId);
+        if(versionSpecificNativesDir.exists()) {
+            String dirPath = versionSpecificNativesDir.getAbsolutePath();
+            javaArgList.add("-Djava.library.path="+dirPath+":"+Tools.NATIVE_LIB_DIR);
+            javaArgList.add("-Djna.boot.library.path="+dirPath);
+            // Sometimes, the game can extract natives itself onto this path
+            javaArgList.add("-Dorg.lwjgl.librarypath="+dirPath);
+        }
+
+        File lwjglExtractDir = new File(Tools.DIR_CACHE, "lwjgl_native/"+versionId);
+        FileUtils.ensureDirectory(lwjglExtractDir);
+        javaArgList.add("-Dorg.lwjgl.system.SharedLibraryExtractPath="+lwjglExtractDir.getAbsolutePath());
+
+        addAuthlibInjectorArgs(javaArgList, account);
+        addNoBlocklistArgs(javaArgList);
+
+        mergeMoJsonArgs(javaArgList, getMoJsonJvmArgs(versionId));
+
+        versionInfo.arguments = null;
+        versionInfo.minecraftArguments = null;
+        versionInfo.assets = null;
+        versionInfo.assetIndex = null;
+
+        javaArgList.addAll(JREUtils.parseJavaArguments(instance.getLaunchArgs()));
+
+        // Zyrox Mobile Game Optimizer: inject safe low-pause GC/JVM flags & smart first-run options.txt
+        int totalRamMb = Tools.getTotalDeviceMemory(activity);
+        int installedModCount = GameOptimizer.countInstalledMods(gamedir);
+        boolean shaderInstalled = GameOptimizer.hasShaderModInstalled(gamedir);
+        String optMode = preFlight.optimizerMode;
+        List<String> zyroxOptFlags = GameOptimizer.buildOptimizedJvmFlags(
+                optMode,
+                javaArgList,
+                runtime.javaVersion,
+                effectiveRamMb,
+                freeDeviceMemory,
+                installedModCount,
+                !Architecture.is32BitsDevice());
+        if (!zyroxOptFlags.isEmpty()) {
+            javaArgList.addAll(zyroxOptFlags);
+            Logger.appendToLog("Zyrox Optimizer [" + optMode + "]: applied "
+                    + zyroxOptFlags.size() + " low-pause JVM/GC optimizations (Java "
+                    + runtime.javaVersion + ", mods=" + installedModCount + ")");
+        }
+        if (git.raufixteam.launcher.performance.GameOptimizer.applyFirstLaunchOptionsIfNeeded(
+                gamedir, optMode, totalRamMb, 120)) {
+            MCOptionUtils.load(gamedir.getAbsolutePath());
+            Logger.appendToLog("Zyrox Optimizer: initialized mobile-tuned options.txt defaults");
+        }
+        int launchRamMb = effectiveRamMb;
+        if (!git.raufixteam.launcher.performance.GameOptimizer.MODE_OFF.equals(
+                git.raufixteam.launcher.performance.GameOptimizer.normalizeMode(optMode))
+                && effectiveRamMb > freeDeviceMemory + 256) {
+            int safeClamped = git.raufixteam.launcher.performance.GameOptimizer.recommendSafeHeapMb(
+                    effectiveRamMb, totalRamMb, freeDeviceMemory, shaderInstalled,
+                    !Architecture.is32BitsDevice());
+            if (safeClamped < effectiveRamMb && safeClamped >= 768) {
+                Logger.appendToLog("Zyrox Optimizer: adjusted over-allocated heap "
+                        + effectiveRamMb + "MB -> " + safeClamped + "MB to prevent Android LMK crash");
+                launchRamMb = safeClamped;
+            }
+        }
+
+        Map<String, String> versionEnvMap = versionInfo.environment;
+
+        GameActivity.reportLoadingStage(R.string.zyrox_loading_renderer);
+        // Setup renderer and native JVM environment
+        gameRenderer.setupEnvironment(activity);
+        JREUtils.setGameEnvironment(activity, versionEnvMap);
+        JREUtils.chdir(instance.getGameDirectory().getAbsolutePath());
+
+        if(!gameRenderer.maybeSetupRenderer()) {
+            if(showDialog(activity, R.string.gr_err_renderer_load_Failed)) return;
+            System.exit(0);
+        }
+        javaArgList.add("-Dorg.lwjgl.opengl.libname=libGLMojo.so");
+        javaArgList.add("-Dorg.lwjgl.freetype.libname="+ Tools.NATIVE_LIB_DIR+"/libfreetype.so");
+
+        InstanceManager.recordLaunchAttempt(instance);
+        final int displayRamMb = launchRamMb;
+        activity.runOnUiThread(() -> Toast.makeText(activity, activity.getString(R.string.autoram_info_msg, displayRamMb), Toast.LENGTH_SHORT).show());
+
+        // SECURITY: Always redact auth tokens, sessions, and UUIDs before logging client args
+        Log.i("GameRunner", "Running with " + LogRedactor.redactArgs(launchArgs));
+        Logger.appendToLog("Running with Minecraft " + versionId + " (" + displayRamMb + " MB heap)");
+
+        String mainClass = versionInfo.mainClass;
+
+        try {
+            GameActivity.reportLoadingStage(R.string.zyrox_loading_starting);
+            JavaRunner.nativeSetupExit(activity);
+            JavaRunner.startJvm(runtime, javaArgList, launchClassPath, mainClass, launchArgs, launchRamMb);
+        }catch (VMLoadException e) {
+            LifecycleAwareAlertDialog.DialogCreator dialogCreator = (dialog, builder) ->
+                builder.setMessage(e.toString(activity)).setPositiveButton(android.R.string.ok, (d, w)->{});
+
+            if(LifecycleAwareAlertDialog.haltOnDialog(activity.getLifecycle(), activity, dialogCreator)) {
+                return;
+            }
+        }
+
+        Tools.restartLauncherActivity(activity);
+        Tools.fullyExit();
+    }
+
+    private static void disableSplash(File dir) {
+        File configDir = new File(dir, "config");
+        if(FileUtils.ensureDirectorySilently(configDir)) {
+            File forgeSplashFile = new File(dir, "config/splash.properties");
+            String forgeSplashContent = "enabled=true";
+            try {
+                if (forgeSplashFile.exists()) {
+                    forgeSplashContent = Tools.read(forgeSplashFile.getAbsolutePath());
+                }
+                if (forgeSplashContent.contains("enabled=true")) {
+                    Tools.write(forgeSplashFile,
+                            forgeSplashContent.replace("enabled=true", "enabled=false"));
+                }
+            } catch (IOException e) {
+                Log.w(Tools.APP_NAME, "Could not disable Forge 1.12.2 and below splash screen!", e);
+            }
+        } else {
+            Log.w(Tools.APP_NAME, "Failed to create the configuration directory");
+        }
+    }
+
+    private static boolean performAuthPing(Context context, Account account) {
+        String injectorUrl = account.authType.injectorUrl;
+        if(injectorUrl == null) return true;
+        Logger.appendToLog("Pinging authentication service...");
+        if(DownloadUtils.pingInjectorUrl(injectorUrl)) return true;
+        Logger.appendToLog("Authentication service did not respond, disabling");
+        Tools.runOnUiThread(()-> Toast.makeText(context, context.getString(R.string.warn_auth_type_missing, injectorUrl), Toast.LENGTH_SHORT).show());
+        return false;
+    }
+
+    private static void addAuthlibInjectorArgs(List<String> javaArgList, Account account) {
+        String injectorUrl = account.authType.injectorUrl;
+        if(injectorUrl == null) return;
+        javaArgList.add("-javaagent:"+Tools.DIR_DATA+"/authlib-injector/authlib-injector.jar="+injectorUrl);
+    }
+
+    private static void addNoBlocklistArgs(List<String> javaArgList) {
+        if(!LauncherPreferences.PREF_DISABLE_BLOCKLIST) return;
+        javaArgList.add("-javaagent:"+Tools.DIR_DATA+"/noblocklist/NoBlocklist-1.0-SNAPSHOT-all.jar");
+    }
+
+    // Skip setting essential flags from the version JSON as we already override them
+    private static boolean shouldSkipArg(String arg) {
+        final String[] args = {
+                "-Djava.library.path=",
+                "-Djna.tmpdir=",
+                "-Dorg.lwjgl.system.SharedLibraryExtractPath=",
+                "-Dio.netty.native.workdir="
+        };
+        for(String s : args) {
+            if(arg.startsWith(s)) return true;
+        }
+        return false;
+    }
+
+    private static void mergeMoJsonArgs(List<String> userArgs, List<String> moJsonArgs) {
+        for(String arg : moJsonArgs) {
+            if(shouldSkipArg(arg)) continue;
+            userArgs.add(arg);
+        }
+    }
+
+    private static List<String> getMoJsonJvmArgs(String versionName) {
+        JVersionList.Version versionInfo = Tools.getVersionInfo(versionName, true);
+        // Parse Forge 1.17+ additional JVM Arguments
+        if (versionInfo.arguments == null || versionInfo.arguments.jvm == null) {
+            return Collections.emptyList();
+        }
+
+        Map<String, String> varArgMap = new ArrayMap<>();
+        varArgMap.put("classpath_separator", ":");
+        varArgMap.put("library_directory", Tools.DIR_HOME_LIBRARY);
+        varArgMap.put("version_name", versionInfo.id);
+        varArgMap.put("natives_directory", Tools.NATIVE_LIB_DIR);
+
+        List<String> clientVmArgs = new ArrayList<>();
+        if (versionInfo.arguments != null) {
+            for (Object arg : versionInfo.arguments.jvm) {
+                if (arg instanceof String) {
+                    clientVmArgs.add((String) arg);
+                } //TODO: implement (?maybe?)
+            }
+        }
+        return JSONUtils.insertJSONValueList(clientVmArgs, varArgMap);
+    }
+
+    private static List<String> getMoJsonClientArgs(Account profile, JVersionList.Version versionInfo, File gameDir) {
+        String username = profile.username;
+        String versionName = versionInfo.id;
+        if (versionInfo.inheritsFrom != null) {
+            versionName = versionInfo.inheritsFrom;
+        }
+
+        String userType = "mojang";
+        try {
+            Date creationDate = DateUtils.getOriginalReleaseDate(versionInfo);
+            // Minecraft 22w43a which adds chat reporting (and signing) was released on
+            // 26th October 2022. So, if the date is not before that (meaning it is equal or higher)
+            // change the userType to MSA to fix the missing signature
+            if(creationDate != null && !DateUtils.dateBefore(creationDate, 2022, 9, 26)) {
+                userType = "msa";
+            }
+        }catch (ParseException e) {
+            Log.e("CheckForProfileKey", "Failed to determine profile creation date, using \"mojang\"", e);
+        }
+
+
+        Map<String, String> varArgMap = new ArrayMap<>();
+        varArgMap.put("auth_session", profile.accessToken); // For legacy versions of MC
+        varArgMap.put("auth_access_token", profile.accessToken);
+        varArgMap.put("auth_player_name", username);
+        varArgMap.put("auth_uuid", profile.profileId.replace("-", ""));
+        varArgMap.put("auth_xuid", profile.xuid);
+        varArgMap.put("assets_root", Tools.ASSETS_PATH);
+        varArgMap.put("assets_index_name", versionInfo.assets);
+        varArgMap.put("game_assets", Tools.ASSETS_PATH + File.separator + "virtual" + File.separator + versionInfo.assets);
+        varArgMap.put("game_directory", gameDir.getAbsolutePath());
+        varArgMap.put("user_properties", "{}");
+        varArgMap.put("user_type", userType);
+        varArgMap.put("version_name", versionName);
+        varArgMap.put("version_type", versionInfo.type);
+
+        List<String> clientArgs = new ArrayList<>();
+        if (versionInfo.arguments != null && versionInfo.arguments.game != null) {
+            // Support Minecraft 1.13+
+            for (Object arg : versionInfo.arguments.game) {
+                if (arg instanceof String) {
+                    clientArgs.add((String) arg);
+                } //TODO: implement else clause
+            }
+        }
+        if(versionInfo.minecraftArguments != null){
+            clientArgs.addAll(splitAndFilterEmpty(versionInfo.minecraftArguments));
+        }
+        return JSONUtils.insertJSONValueList(clientArgs, varArgMap);
+    }
+
+    private static List<String> splitAndFilterEmpty(String argStr) {
+        List<String> strList = new ArrayList<>();
+        for (String arg : argStr.split(" ")) {
+            if (!arg.isEmpty()) {
+                strList.add(arg);
+            }
+        }
+        return strList;
+    }
+
+    public static @NonNull String pickRuntime(Instance instance, int targetJavaVersion) {
+        String runtime = Tools.getSelectedRuntime(instance);
+        Runtime current = runtime != null ? MultiRTUtils.read(runtime) : null;
+        String deviceArch = Architecture.archAsString(Architecture.getDeviceArchitecture());
+
+        Runtime advised = JavaRuntimeAdvisor.autoSelectForLaunch(
+                instance,
+                targetJavaVersion,
+                current,
+                MultiRTUtils.getRuntimes(),
+                deviceArch);
+
+        if (advised != null && Tools.isValidString(advised.name)) {
+            if (instance != null && !instance.runtimeLocked
+                    && !advised.name.equals(instance.selectedRuntime)) {
+                instance.selectedRuntime = advised.name;
+                instance.maybeWrite();
+            }
+            return advised.name;
+        }
+
+        // Final fallback through MultiRTUtils nearest match
+        if (runtime == null || current == null || current.javaVersion == 0
+                || current.javaVersion < targetJavaVersion) {
+            String preferredRuntime = MultiRTUtils.getNearestJreName(targetJavaVersion);
+            if (preferredRuntime == null) {
+                throw new RuntimeException(
+                        "Java " + targetJavaVersion + " runtime is required for this Minecraft version. "
+                                + "Install OpenJDK " + targetJavaVersion + " in Java Runtime Manager and relaunch.");
+            }
+            if (instance != null && !instance.runtimeLocked && instance.selectedRuntime != null) {
+                instance.selectedRuntime = preferredRuntime;
+                instance.maybeWrite();
+            }
+            runtime = preferredRuntime;
+        }
+        return runtime;
+    }
+}

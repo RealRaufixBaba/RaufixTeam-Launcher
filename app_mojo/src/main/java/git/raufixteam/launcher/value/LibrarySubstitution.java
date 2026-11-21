@@ -1,0 +1,5 @@
+package git.raufixteam.launcher.value;
+
+public class LibrarySubstitution extends DependentLibrary {
+    public boolean skip;
+}

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 13–16 Material You Monochrome Faceted Crystal "Z" Vector (108dp viewport, 66dp safe zone) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Bold faceted crystal "Z" silhouette matching official Zyrox Launcher logo -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M34,30 L78,30 L53,66 L76,66 L69,78 L30,78 L55,42 L31,42 Z" />
+</vector>

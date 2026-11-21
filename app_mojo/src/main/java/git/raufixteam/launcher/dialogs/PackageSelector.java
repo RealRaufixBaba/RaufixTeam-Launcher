@@ -1,0 +1,71 @@
+package git.raufixteam.launcher.dialogs;
+
+import android.annotation.SuppressLint;
+import android.content.Context;
+import android.widget.Button;
+
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.appcompat.app.AlertDialog;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
+
+public abstract class PackageSelector {
+    protected AlertDialog mDialog;
+    protected RecyclerView mDialogView;
+    protected EditAdapter mAdapter;
+
+    public void show() {
+        this.refresh();
+        if (mDialog != null) mDialog.show();
+    }
+
+    public void close() {
+        if (mDialog != null) mDialog.cancel();
+    }
+
+    public void onDismiss(Runnable runnable) {
+        if (mDialog != null) mDialog.setOnDismissListener(d -> runnable.run());
+    }
+
+    public void prepare(Context context, ActivityResultLauncher<Object> launcher) {
+        mDialogView = new RecyclerView(context);
+        int pad = (int) (10 * context.getResources().getDisplayMetrics().density);
+        mDialogView.setPadding(pad, pad / 2, pad, pad / 2);
+        mDialogView.setClipToPadding(false);
+        mDialogView.setLayoutManager(new LinearLayoutManager(context, LinearLayoutManager.VERTICAL, false));
+        PackageAdapter<?> adapter = createAdapter(context, this);
+        mDialogView.setAdapter(adapter);
+        mAdapter = adapter;
+
+        mDialog = new AlertDialog.Builder(context)
+                .setTitle(getTitleRes())
+                .setView(mDialogView)
+                .setPositiveButton(getPositiveButtonText(), (dialog, which) -> onPositive(context, launcher))
+                .setNeutralButton(getNeutralButtonText(), null)
+                .create();
+
+        // Custom button behavior without dismiss
+        mDialog.setOnShowListener(dialog -> {
+            Button button = ((AlertDialog) dialog).getButton(AlertDialog.BUTTON_NEUTRAL);
+            button.setOnClickListener(view -> {
+                boolean isEditing = !mAdapter.isEditing();
+                mAdapter.setEditing(isEditing);
+                button.setText(isEditing ? getEditingButtonLabel() : getNeutralButtonText());
+            });
+        });
+    }
+
+    @SuppressLint("NotifyDataSetChanged")
+    public void refresh() {
+        if (mDialogView == null) return;
+        RecyclerView.Adapter<?> adapter = mDialogView.getAdapter();
+        if (adapter != null) adapter.notifyDataSetChanged();
+    }
+
+    protected abstract int getTitleRes();
+    protected abstract int getPositiveButtonText();
+    protected abstract int getNeutralButtonText();
+    protected abstract int getEditingButtonLabel();
+    protected abstract PackageAdapter<?> createAdapter(Context context, PackageSelector dialog);
+    protected abstract void onPositive(Context context, ActivityResultLauncher<Object> launcher);
+}

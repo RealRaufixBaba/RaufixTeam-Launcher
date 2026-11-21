@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Zyrox Starlight Soft Inset Glass Card -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="270"
+                android:startColor="#420E1525"
+                android:endColor="#32090F1D" />
+            <corners android:radius="14dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="270"
+                android:startColor="#18F2F8FF"
+                android:centerColor="#05FFFFFF"
+                android:endColor="#0ED5E5F9" />
+            <stroke android:width="0.95dp" android:color="#78E8F1FB" />
+            <corners android:radius="14dp" />
+        </shape>
+    </item>
+</layer-list>

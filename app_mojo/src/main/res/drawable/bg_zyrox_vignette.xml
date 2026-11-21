@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Zyrox Starlight Twilight Atmospheric Vignette + Crisp Right-Dock Scrim -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Subtle warm plum perimeter bloom preserving 100% vivid sunlit cherry-blossom gazebo -->
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="radial"
+                android:gradientRadius="84%p"
+                android:centerX="0.38"
+                android:centerY="0.50"
+                android:startColor="#00090D19"
+                android:centerColor="#08090D19"
+                android:endColor="#38090D19" />
+        </shape>
+    </item>
+    <!-- Whisper-soft top crest scrim so ZYROX hero branding pops over sunlit morning sky -->
+    <item android:height="112dp" android:gravity="top">
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="270"
+                android:startColor="#2C090F1B"
+                android:endColor="#00090F1B" />
+        </shape>
+    </item>
+    <!-- Silky midnight-indigo right-edge transition so white Liquid Glass dock controls sparkle cleanly -->
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="0"
+                android:startColor="#00090D19"
+                android:centerColor="#08090D19"
+                android:endColor="#44080E1C" />
+        </shape>
+    </item>
+</layer-list>

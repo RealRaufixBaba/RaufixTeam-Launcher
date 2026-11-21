@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Zyrox 2.0 Flat Button — Unified Liquid Glass Secondary -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@drawable/btn_zyrox_secondary" />
+</selector>

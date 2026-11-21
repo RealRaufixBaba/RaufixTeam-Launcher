@@ -1,0 +1,184 @@
+package git.raufixteam.launcher.input.buttons;
+
+import static git.raufixteam.launcher.input.gamepad.GamepadJoystick.DIRECTION_EAST;
+import static git.raufixteam.launcher.input.gamepad.GamepadJoystick.DIRECTION_NONE;
+import static git.raufixteam.launcher.input.gamepad.GamepadJoystick.DIRECTION_NORTH;
+import static git.raufixteam.launcher.input.gamepad.GamepadJoystick.DIRECTION_NORTH_EAST;
+import static git.raufixteam.launcher.input.gamepad.GamepadJoystick.DIRECTION_NORTH_WEST;
+import static git.raufixteam.launcher.input.gamepad.GamepadJoystick.DIRECTION_SOUTH;
+import static git.raufixteam.launcher.input.gamepad.GamepadJoystick.DIRECTION_SOUTH_EAST;
+import static git.raufixteam.launcher.input.gamepad.GamepadJoystick.DIRECTION_SOUTH_WEST;
+import static git.raufixteam.launcher.input.gamepad.GamepadJoystick.DIRECTION_WEST;
+import static git.raufixteam.launcher.game.platform.Platform.PLATFORM;
+
+import android.annotation.SuppressLint;
+import android.view.KeyEvent;
+import android.view.View;
+
+import git.raufixteam.launcher.Tools;
+import git.raufixteam.launcher.input.ControlData;
+import git.raufixteam.launcher.input.ControlJoystickData;
+import git.raufixteam.launcher.input.ControlLayout;
+import git.raufixteam.launcher.input.gamepad.GamepadJoystick;
+import git.raufixteam.launcher.input.handleview.EditControlSideDialog;
+
+import git.raufixteam.launcher.CallbackBridge;
+
+import io.github.controlwear.virtual.joystick.android.JoystickView;
+
+@SuppressLint("ViewConstructor")
+public class ControlJoystick extends JoystickView implements ControlInterface {
+    public final static int DIRECTION_FORWARD_LOCK = 8;
+    // Directions keycode
+    private final int[] mDirectionForwardLock = new int[]{KeyEvent.KEYCODE_CTRL_LEFT};
+    private final int[] mDirectionForward = new int[]{KeyEvent.KEYCODE_W};
+    private final int[] mDirectionRight = new int[]{KeyEvent.KEYCODE_D};
+    private final int[] mDirectionBackward = new int[]{KeyEvent.KEYCODE_S};
+    private final int[] mDirectionLeft = new int[]{KeyEvent.KEYCODE_A};
+    private ControlJoystickData mControlData;
+    private int mLastDirectionInt = GamepadJoystick.DIRECTION_NONE;
+    private int mCurrentDirectionInt = GamepadJoystick.DIRECTION_NONE;
+    public ControlJoystick(ControlLayout parent, ControlJoystickData data) {
+        super(parent.getContext());
+        init(data, parent);
+    }
+
+    private static void sendInput(int[] keys, boolean isDown) {
+        for (int key : keys) {
+            int modifiers = CallbackBridge.getCurrentMods();
+            PLATFORM.sendKeyEvent(key, isDown, modifiers);
+        }
+    }
+
+    private void init(ControlJoystickData data, ControlLayout layout) {
+        mControlData = data;
+        setProperties(preProcessProperties(data, layout));
+        setDeadzone(35);
+        setFixedCenter(data.absolute);
+        setAutoReCenterButton(true);
+
+        injectBehaviors();
+
+        setOnMoveListener(new OnMoveListener() {
+            @Override
+            public void onMove(int angle, int strength) {
+                mLastDirectionInt = mCurrentDirectionInt;
+                mCurrentDirectionInt = getDirectionInt(angle, strength);
+
+                if (mLastDirectionInt != mCurrentDirectionInt) {
+                    sendDirectionalKeycode(mLastDirectionInt, false);
+                    sendDirectionalKeycode(mCurrentDirectionInt, true);
+                }
+            }
+
+            @Override
+            public void onForwardLock(boolean isLocked) {
+                sendInput(mDirectionForwardLock, isLocked);
+            }
+        });
+    }
+
+    @Override
+    public View getControlView() {
+        return this;
+    }
+
+    @Override
+    public ControlData getProperties() {
+        return mControlData;
+    }
+
+    @Override
+    public void setProperties(ControlData properties, boolean changePos) {
+        mControlData = (ControlJoystickData) properties;
+        mControlData.isHideable = true;
+        ControlInterface.super.setProperties(properties, changePos);
+        postDelayed(() -> {
+            setForwardLockDistance(mControlData.forwardLock ? (int) Tools.dpToPx(60) : 0);
+            setFixedCenter(mControlData.absolute);
+        }, 10);
+    }
+
+    @Override
+    public void removeButton() {
+        getControlLayoutParent().getLayout().mJoystickDataList.remove(getProperties());
+        getControlLayoutParent().removeView(this);
+    }
+
+    @Override
+    public void cloneButton() {
+        ControlJoystickData data = new ControlJoystickData(mControlData);
+        getControlLayoutParent().addJoystickButton(data);
+    }
+
+    @Override
+    public void handlePressed() {/*STUB since non swipeable*/}
+
+    @Override
+    public void handleReleased() {/*STUB since non swipeable*/}
+
+
+    @Override
+    public void setBackground() {
+        float rawStroke = getProperties().strokeWidth;
+        float scale = getControlLayoutParent() != null ? (getControlLayoutParent().getLayoutScale() / 100f) : 1f;
+        int borderPx = rawStroke > 0
+                ? (int) Tools.dpToPx(rawStroke * scale)
+                : Math.max(2, (int) Tools.dpToPx(1.25f));
+        int bgColor = getProperties().bgColor;
+        boolean defaultBg = (bgColor == git.raufixteam.launcher.ui.ZyroxLiquidGlassDrawable.LEGACY_DEFAULT_CONTROL_BG
+                || bgColor == 0);
+        setBorderWidth(borderPx);
+        setBorderColor(rawStroke > 0 ? getProperties().strokeColor : 0xB0F0F7FF);
+        setBackgroundColor(defaultBg ? 0x14E6F0FF : bgColor);
+        setButtonColor(0x56DCEBFF);
+        setAlpha(androidx.core.math.MathUtils.clamp(getProperties().opacity, 0.08f, 1.0f));
+    }
+
+    @Override
+    public void loadEditValues(EditControlSideDialog editControlPopup) {
+        editControlPopup.loadJoystickValues(mControlData);
+    }
+
+    private int getDirectionInt(int angle, int intensity) {
+        if (intensity == 0) return DIRECTION_NONE;
+        return (int) (((angle + 22.5) / 45) % 8);
+    }
+
+    private void sendDirectionalKeycode(int direction, boolean isDown) {
+        switch (direction) {
+            case DIRECTION_NORTH:
+                sendInput(mDirectionForward, isDown);
+                break;
+            case DIRECTION_NORTH_EAST:
+                sendInput(mDirectionForward, isDown);
+                sendInput(mDirectionRight, isDown);
+                break;
+            case DIRECTION_EAST:
+                sendInput(mDirectionRight, isDown);
+                break;
+            case DIRECTION_SOUTH_EAST:
+                sendInput(mDirectionRight, isDown);
+                sendInput(mDirectionBackward, isDown);
+                break;
+            case DIRECTION_SOUTH:
+                sendInput(mDirectionBackward, isDown);
+                break;
+            case DIRECTION_SOUTH_WEST:
+                sendInput(mDirectionBackward, isDown);
+                sendInput(mDirectionLeft, isDown);
+                break;
+            case DIRECTION_WEST:
+                sendInput(mDirectionLeft, isDown);
+                break;
+            case DIRECTION_NORTH_WEST:
+                sendInput(mDirectionForward, isDown);
+                sendInput(mDirectionLeft, isDown);
+                break;
+            case DIRECTION_FORWARD_LOCK:
+                sendInput(mDirectionForwardLock, isDown);
+                break;
+        }
+    }
+
+}

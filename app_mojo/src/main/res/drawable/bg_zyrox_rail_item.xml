@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Zyrox Starlight Crystal Settings & Instance Rail Item -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <gradient android:angle="270" android:startColor="#4AE5F0FE" android:endColor="#309CC1F4" />
+            <stroke android:width="1.15dp" android:color="#F6F7FAFF" />
+            <corners android:radius="12dp" />
+        </shape>
+    </item>
+    <item android:state_selected="true">
+        <layer-list>
+            <item>
+                <shape android:shape="rectangle">
+                    <gradient android:angle="270" android:startColor="#42E1EEFE" android:endColor="#2892BAF2" />
+                    <stroke android:width="1.15dp" android:color="#F0F5F9FF" />
+                    <corners android:radius="12dp" />
+                </shape>
+            </item>
+            <item android:left="10dp" android:top="2.4dp" android:right="10dp" android:height="1.2dp" android:gravity="top">
+                <shape android:shape="rectangle">
+                    <gradient android:angle="0" android:startColor="#00FFFFFF" android:centerColor="#A4FFFFFF" android:endColor="#00FFFFFF" />
+                    <corners android:radius="1dp" />
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+    <item android:state_activated="true">
+        <shape android:shape="rectangle">
+            <gradient android:angle="270" android:startColor="#42E1EEFE" android:endColor="#2892BAF2" />
+            <stroke android:width="1.15dp" android:color="#F0F5F9FF" />
+            <corners android:radius="12dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient android:angle="270" android:startColor="#18F2F8FF" android:endColor="#0ED5E5F9" />
+            <stroke android:width="0.85dp" android:color="#48E8F1FB" />
+            <corners android:radius="12dp" />
+        </shape>
+    </item>
+</selector>

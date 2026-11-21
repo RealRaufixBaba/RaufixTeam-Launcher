@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Zyrox Starlight Crystal Home Utility Capsule Bar -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient android:angle="270" android:startColor="#380C1221" android:endColor="#2A080E1B" />
+            <corners android:radius="12dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient android:angle="270" android:startColor="#1EF2F8FF" android:endColor="#10D5E5F9" />
+            <stroke android:width="1dp" android:color="#A4EBF3FE" />
+            <corners android:radius="12dp" />
+        </shape>
+    </item>
+</layer-list>
