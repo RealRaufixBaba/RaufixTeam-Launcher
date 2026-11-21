@@ -60,24 +60,14 @@ jobs:
       - name: Assemble Full Release APK
         run: |
           set +e
-          timeout 1800 gradle --no-daemon --max-workers=1 :app_mojo:assembleFullRelease --stacktrace --info 2>&1 | tee assemble.log
+          timeout 1800 gradle --no-daemon --max-workers=1 :app_mojo:assembleFullRelease --stacktrace 2>&1 | tee assemble.log
           EXIT_CODE=${PIPESTATUS[0]}
           echo "::error::Assemble exit code: $EXIT_CODE"
-          echo "### Error lines from assemble.log:"
-          grep -iE "error|exception|failed|could not|unknown|Caused by" assemble.log 2>/dev/null | head -30 || true
-          echo "### Last 60 lines from assemble.log:"
-          tail -60 assemble.log 2>/dev/null || true
           {
             echo "## Assemble Output"
             echo ""
-            echo '### Error lines'
             echo '```'
-            grep -iE "error|exception|failed|could not|unknown|Caused by" assemble.log 2>/dev/null | head -30
-            echo '```'
-            echo ""
-            echo '### Last 50 lines'
-            echo '```'
-            tail -50 assemble.log 2>/dev/null
+            tail -100 assemble.log 2>/dev/null
             echo '```'
           } >> $GITHUB_STEP_SUMMARY
           exit $EXIT_CODE
