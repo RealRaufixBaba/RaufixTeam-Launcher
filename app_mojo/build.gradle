@@ -305,10 +305,6 @@ class AssetTaskRegistrar {
         }
 
         mergeAssetsTask.dependsOn copyTask
-
-        targetProject.tasks.withType(org.gradle.jvm.tasks.Jar.class).configureEach {
-            it.destinationDirectory = jarTargetDir
-        }
     }
 
     def onlineJarDependency(String jarUrl, String jarProject, String dependency, String version, String suffix,  String relativePath) {
