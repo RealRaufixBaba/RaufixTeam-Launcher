@@ -60,11 +60,15 @@ jobs:
       - name: Assemble Full Release APK
         run: |
           set +e
-          timeout 1800 gradle --no-daemon --max-workers=1 :app_mojo:assembleFullRelease --stacktrace 2>&1 | tee assemble.log
+          timeout 1800 gradle --no-daemon --max-workers=1 :app_mojo:assembleFullRelease --stacktrace --info 2>&1 | tee assemble.log
           EXIT_CODE=${PIPESTATUS[0]}
           echo "::error::Assemble exit code: $EXIT_CODE"
           if [ -f assemble.log ] && [ -s assemble.log ]; then
-            tail -200 assemble.log | while IFS= read -r line; do
+            grep -iE "error|exception|cannot find|does not exist|failed|caused by|unable|what went wrong|could not|unknown|BUILD FAILED|task failed|execution failed|NoBlocklist|forge_installer|cacio|Configure project" assemble.log | head -40 | while IFS= read -r line; do
+              echo "::error::${line}"
+            done
+            echo "::error::=== TAIL ==="
+            tail -30 assemble.log | while IFS= read -r line; do
               echo "::error::${line}"
             done
           fi
