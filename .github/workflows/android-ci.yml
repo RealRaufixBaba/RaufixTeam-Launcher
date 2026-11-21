@@ -57,9 +57,9 @@ jobs:
           echo "GRADLE_HOME=$HOME/gradle-${GRADLE_VERSION}" >> $GITHUB_ENV
           echo "$HOME/gradle-${GRADLE_VERSION}/bin" >> $GITHUB_PATH
 
-      - name: Dry-run assemble (check task graph)
+      - name: Dry-run assemble offline (check if network is the issue)
         run: |
-          gradle --no-daemon :app_mojo:assembleFullRelease --dry-run --console=plain 2>&1 | head -50
+          gradle --no-daemon --offline :app_mojo:assembleFullRelease --dry-run --console=plain 2>&1 | head -50 || echo "OFFLINE_DRY_RUN_FAILED"
 
       - name: Assemble Full Release APK
         run: |
