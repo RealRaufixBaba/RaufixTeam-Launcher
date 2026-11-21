@@ -68,15 +68,15 @@ jobs:
 
       - name: Unit tests (Full Release)
         id: unit-test
-        run: gradle :app_mojo:testFullReleaseUnitTest
+        run: gradle :app_mojo:testFullReleaseUnitTest --stacktrace --info || (echo "=== UNIT TEST FAILED ==="; exit 1)
 
       - name: Lint (Full Release)
         id: lint
-        run: gradle :app_mojo:lintFullRelease
+        run: gradle :app_mojo:lintFullRelease --stacktrace --info || (echo "=== LINT FAILED ==="; exit 1)
 
       - name: Assemble Full Release APK
         id: assemble
-        run: gradle :app_mojo:assembleFullRelease
+        run: gradle :app_mojo:assembleFullRelease --stacktrace --info || (echo "=== ASSEMBLE FAILED ==="; exit 1)
 
       - name: Upload unit test reports
         if: always()
