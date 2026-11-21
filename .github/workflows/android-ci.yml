@@ -59,10 +59,13 @@ jobs:
 
       - name: Assemble Full Release APK
         run: |
-          timeout 1200 gradle --no-daemon --max-workers=1 :app_mojo:assembleFullRelease --stacktrace > assemble.log 2>&1 || true
+          set +e
+          timeout 1200 gradle --no-daemon --max-workers=1 :app_mojo:assembleFullRelease --stacktrace > assemble.log 2>&1
           EXIT_CODE=$?
-          # Echo error-related lines as annotations
-          grep -iE "error:|failed|exception|caused by|could not|unable to|timeout|Execution failed" assemble.log 2>/dev/null | head -20 | while IFS= read -r line; do echo "::error::[ASSEMBLE] $line"; done
+          # Echo entire log as error annotations (fallback if grep finds nothing)
+          if [ -f assemble.log ]; then
+            cat assemble.log | sed 's/^/::error::[ASSEMBLE] /' | head -100
+          fi
           echo "::error::Assemble exit code: $EXIT_CODE"
           echo "::notice::Assemble log saved to assemble.log artifact"
           exit $EXIT_CODE
