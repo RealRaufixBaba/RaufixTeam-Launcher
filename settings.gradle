@@ -2,6 +2,7 @@ pluginManagement {
     repositories {
         gradlePluginPortal()
         google()
+        mavenCentral() // AGP transitive deps (error_prone_annotations)
         maven { url "https://plugins.gradle.org/m2/" } // AGP transitive deps (error_prone_annotations)
     }
 }
