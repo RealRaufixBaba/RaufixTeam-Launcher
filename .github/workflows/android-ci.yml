@@ -60,7 +60,7 @@ jobs:
       - name: Assemble Full Release APK
         run: |
           set +e
-          timeout 600 gradle --no-daemon --max-workers=1 --info :app_mojo:assembleFullRelease --stacktrace > assemble.log 2>&1
+          timeout 1800 gradle --no-daemon --max-workers=1 :app_mojo:assembleFullRelease --stacktrace > assemble.log 2>&1
           EXIT_CODE=$?
           # Echo first 200 lines as error annotations
           head -200 assemble.log 2>/dev/null | while IFS= read -r line; do echo "::error::[ASSEMBLE] $line"; done
