@@ -66,23 +66,10 @@ jobs:
       - name: Gradle version check
         run: gradle --version
 
-      - name: Debug: list Gradle subprojects
-        run: |
-          set +e
-          gradle :app_mojo:projects --console=plain > gradle-projects.log 2>&1
-          echo "EXIT_CODE=$?" >> gradle-projects.log
-          cat gradle-projects.log
-          echo "::notice::Gradle projects log captured above"
-
-      - name: Debug: list submodule contents
-        run: |
-          echo "=== NoBlocklist ==="; ls NoBlocklist/ 2>/dev/null
-          echo "=== glfw/jni_bindings ==="; ls glfw/jni_bindings/ 2>/dev/null
-          echo "=== sdl/jni_bindings ==="; ls sdl/jni_bindings/ 2>/dev/null
-          echo "=== mojoexec/jni_bindings ==="; ls mojoexec/jni_bindings/ 2>/dev/null
+      - name: Configure project (fail fast on config errors)
+        run: gradle :app_mojo:help --console=plain --no-daemon 2>&1 | tee configure.log || (echo "::error::Configure failed"; exit 1)
 
       - name: Unit tests (Full Release)
-        id: unit-test
         run: |
           set +e
           gradle --no-daemon :app_mojo:testFullReleaseUnitTest --stacktrace --info > unit-test.log 2>&1
@@ -91,14 +78,43 @@ jobs:
             echo "## Unit Test Gradle Output"
             echo ""
             echo '```'
-            cat unit-test.log 2>/dev/null || echo "(no log file)"
+            cat unit-test.log 2>/dev/null || echo "(no log)"
             echo '```'
             echo ""
             echo "**Exit code:** $EXIT_CODE"
           } >> $GITHUB_STEP_SUMMARY
-          if [ $EXIT_CODE -ne 0 ]; then
-            echo "::error::Unit tests failed with exit code $EXIT_CODE"
-          fi
+          exit $EXIT_CODE
+
+      - name: Lint (Full Release)
+        run: |
+          set +e
+          gradle --no-daemon :app_mojo:lintFullRelease --stacktrace --info > lint.log 2>&1
+          EXIT_CODE=$?
+          {
+            echo "## Lint Gradle Output"
+            echo ""
+            echo '```'
+            cat lint.log 2>/dev/null || echo "(no log)"
+            echo '```'
+            echo ""
+            echo "**Exit code:** $EXIT_CODE"
+          } >> $GITHUB_STEP_SUMMARY
+          exit $EXIT_CODE
+
+      - name: Assemble Full Release APK
+        run: |
+          set +e
+          gradle --no-daemon :app_mojo:assembleFullRelease --stacktrace --info > assemble.log 2>&1
+          EXIT_CODE=$?
+          {
+            echo "## Assemble Gradle Output"
+            echo ""
+            echo '```'
+            cat assemble.log 2>/dev/null || echo "(no log)"
+            echo '```'
+            echo ""
+            echo "**Exit code:** $EXIT_CODE"
+          } >> $GITHUB_STEP_SUMMARY
           exit $EXIT_CODE
 
       - name: Upload unit test debug log
@@ -109,26 +125,6 @@ jobs:
           path: unit-test.log
           retention-days: 3
 
-      - name: Lint (Full Release)
-        id: lint
-        run: |
-          set +e
-          gradle --no-daemon :app_mojo:lintFullRelease --stacktrace --info > lint.log 2>&1
-          EXIT_CODE=$?
-          {
-            echo "## Lint Gradle Output"
-            echo ""
-            echo '```'
-            cat lint.log 2>/dev/null || echo "(no log file)"
-            echo '```'
-            echo ""
-            echo "**Exit code:** $EXIT_CODE"
-          } >> $GITHUB_STEP_SUMMARY
-          if [ $EXIT_CODE -ne 0 ]; then
-            echo "::error::Lint failed with exit code $EXIT_CODE"
-          fi
-          exit $EXIT_CODE
-
       - name: Upload lint debug log
         if: always()
         uses: actions/upload-artifact@v4
@@ -137,26 +133,6 @@ jobs:
           path: lint.log
           retention-days: 3
 
-      - name: Assemble Full Release APK
-        id: assemble
-        run: |
-          set +e
-          gradle --no-daemon :app_mojo:assembleFullRelease --stacktrace --info > assemble.log 2>&1
-          EXIT_CODE=$?
-          {
-            echo "## Assemble Gradle Output"
-            echo ""
-            echo '```'
-            cat assemble.log 2>/dev/null || echo "(no log file)"
-            echo '```'
-            echo ""
-            echo "**Exit code:** $EXIT_CODE"
-          } >> $GITHUB_STEP_SUMMARY
-          if [ $EXIT_CODE -ne 0 ]; then
-            echo "::error::Assemble failed with exit code $EXIT_CODE"
-          fi
-          exit $EXIT_CODE
-
       - name: Upload assemble debug log
         if: always()
         uses: actions/upload-artifact@v4
@@ -164,24 +140,6 @@ jobs:
           name: assemble-debug-log
           path: assemble.log
           retention-days: 3
-
-      - name: Upload unit test reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: unit-test-reports
-          path: app_mojo/build/reports/tests/testFullReleaseUnitTest/
-          retention-days: 7
-          if-no-files-found: warn
-
-      - name: Upload lint reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: lint-reports
-          path: app_mojo/build/reports/lints/
-          retention-days: 7
-          if-no-files-found: warn
 
       - name: Upload release APK
         if: success()
