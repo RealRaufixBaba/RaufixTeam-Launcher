@@ -66,8 +66,14 @@ jobs:
           {
             echo "## Assemble Output"
             echo ""
+            echo '### Error lines'
             echo '```'
-            cat assemble.log 2>/dev/null
+            grep -iE "error|exception|failed|could not|unknown" assemble.log 2>/dev/null | head -30
+            echo '```'
+            echo ""
+            echo '### Last 50 lines'
+            echo '```'
+            tail -50 assemble.log 2>/dev/null
             echo '```'
           } >> $GITHUB_STEP_SUMMARY
           exit $EXIT_CODE
