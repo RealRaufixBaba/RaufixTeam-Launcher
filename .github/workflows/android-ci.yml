@@ -67,7 +67,7 @@ jobs:
             echo "## Assemble Output"
             echo ""
             echo '```'
-            tail -80 assemble.log 2>/dev/null
+            cat assemble.log 2>/dev/null
             echo '```'
           } >> $GITHUB_STEP_SUMMARY
           exit $EXIT_CODE
