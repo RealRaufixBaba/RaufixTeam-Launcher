@@ -208,7 +208,12 @@ class AssetTaskRegistrar {
         def variantNameRaw = (flavorName + buildTypeName)
         variantName = variantNameRaw.capitalize()
         println "::error::[DEBUG_VARIANT] name=$variantName raw=$variantNameRaw flavor=$flavorName buildType=$buildTypeName"
-        mergeAssetsTask = project.tasks.named("pre${variantName}Build").get()
+        try {
+            mergeAssetsTask = project.tasks.named("pre${variantName}Build").get()
+        } catch (Exception e) {
+            println "::error::[DEBUG_TASK_ERROR] variant=$variantName taskName=pre${variantName}Build error=${e.message}"
+            throw e
+        }
 
         targetAssetsDir = new File(project.projectDir, "build/intermediates/remote_asset_set/${variantNameRaw.toLowerCase()}/")
         createDirectories(targetAssetsDir)
