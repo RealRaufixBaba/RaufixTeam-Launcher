@@ -64,7 +64,7 @@ jobs:
           EXIT_CODE=${PIPESTATUS[0]}
           echo "::error::Assemble exit code: $EXIT_CODE"
           if [ -f assemble.log ] && [ -s assemble.log ]; then
-            grep -iE "error|cannot find|does not exist|exception|failed|caused by|unable|what went wrong|could not|build failed|task failed|execution failed" assemble.log | head -30 | while IFS= read -r line; do
+            tail -30 assemble.log | while IFS= read -r line; do
               echo "::error::${line}"
             done
           fi
