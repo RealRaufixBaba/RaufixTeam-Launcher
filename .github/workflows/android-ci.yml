@@ -98,10 +98,10 @@ jobs:
       - name: Assemble Full Release APK
         run: |
           set +e
-          gradle --no-daemon :app_mojo:assembleFullRelease --stacktrace --info > assemble.log 2>&1
+          timeout 900 gradle --no-daemon --max-workers=1 :app_mojo:assembleFullRelease --stacktrace --info > assemble.log 2>&1
           EXIT_CODE=$?
-          # Echo first 80 lines of log as error annotation (contains actual error message)
-          head -80 assemble.log 2>/dev/null | while read line; do echo "::error::[ASSEMBLE] $line"; done
+          # Echo first 100 lines of log as error annotation
+          head -100 assemble.log 2>/dev/null | while read line; do echo "::error::[ASSEMBLE] $line"; done
           echo "::error::Assemble exit code: $EXIT_CODE"
           if [ $EXIT_CODE -ne 0 ]; then
             exit 1
@@ -181,7 +181,7 @@ jobs:
           RAUFIXTEAM_KEYSTORE_PASSWORD: ${{ secrets.RAUFIXTEAM_KEYSTORE_PASSWORD }}
           RAUFIXTEAM_KEY_ALIAS: ${{ secrets.RAUFIXTEAM_KEY_ALIAS }}
           RAUFIXTEAM_KEY_PASSWORD: ${{ secrets.RAUFIXTEAM_KEY_PASSWORD }}
-        run: gradle --no-daemon :app_mojo:assembleFullRelease
+        run: timeout 900 gradle --no-daemon --max-workers=1 :app_mojo:assembleFullRelease
 
       - name: Wipe temporary keystore
         if: always()
