@@ -1,0 +1,143 @@
+package git.raufixteam.launcher.instances;
+
+import android.graphics.Color;
+import android.graphics.drawable.Drawable;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.BaseAdapter;
+
+import androidx.core.graphics.ColorUtils;
+
+import git.raufixteam.launcher.R;
+
+import git.raufixteam.launcher.Tools;
+
+import fr.spse.extended_view.ExtendedTextView;
+
+/*
+ * Adapter for listing launcher profiles in a Spinner
+ */
+public class InstanceAdapter extends BaseAdapter {
+    private Instances mInstances;
+    private int mSelectionIndex;
+    private final InstanceAdapterExtra[] mExtraEntires;
+
+
+    public InstanceAdapter(InstanceAdapterExtra[] extraEntries) {
+        if(extraEntries == null) extraEntries = new InstanceAdapterExtra[0];
+        mExtraEntires = extraEntries;
+    }
+    /**
+     * @return how much entries (both instances and extra adapter entries) are in the adapter right now
+     */
+    @Override
+    public int getCount() {
+        if(mInstances == null) return mExtraEntires.length;
+        return mInstances.list.size() + mExtraEntires.length;
+    }
+    /**
+     * Gets the adapter entry at a given index
+     * @param position index to retrieve
+     * @return Instance, ProfileAdapterExtra or null
+     */
+    @Override
+    public Object getItem(int position) {
+        if(mInstances == null) return mExtraEntires[position];
+        int instanceListSize = mInstances.list.size();
+        int extraPosition = position - instanceListSize;
+        if(position < instanceListSize) {
+            return mInstances.list.get(position);
+        }else if(extraPosition >= 0 && extraPosition < mExtraEntires.length){
+            return mExtraEntires[extraPosition];
+        }
+        return null;
+    }
+
+    @Override
+    public long getItemId(int position) {
+        return position;
+    }
+
+    @Override
+    public View getView(int position, View convertView, ViewGroup parent) {
+        View v = convertView;
+        if (v == null) v = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_version_profile_layout,parent,false);
+        setView(v, position, true);
+        return v;
+    }
+
+    public void setViewInstance(View v, DisplayInstance i, int idx, boolean displaySelection) {
+        ExtendedTextView extendedTextView = (ExtendedTextView) v;
+
+        //MinecraftProfile minecraftProfile = mProfiles.get(nm);
+        //if(minecraftProfile == null) minecraftProfile = dummy;
+        Drawable cachedIcon = InstanceIconProvider.fetchIcon(v.getResources(), i);
+        extendedTextView.setCompoundDrawablesRelative(cachedIcon, null, extendedTextView.getCompoundsDrawables()[2], null);
+
+        // Historically, the profile name "New" was hardcoded as the default profile name
+        // We consider "New" the same as putting no name at all
+
+        String profileName = Tools.validOrNullString(i.name);
+        String versionName = Tools.validOrNullString(i.versionId);
+
+        if (Instance.isLatestFabricId(versionName))
+            versionName = v.getContext().getString(R.string.profiles_latest_fabric);
+        else if (Instance.isLatestReleaseId(versionName))
+            versionName = v.getContext().getString(R.string.profiles_latest_release);
+        else if (Instance.isLatestSnapshotId(versionName))
+            versionName = v.getContext().getString(R.string.profiles_latest_snapshot);
+
+        String baseTitle;
+        if (versionName == null && profileName != null)
+            baseTitle = profileName;
+        else if (versionName != null && profileName == null)
+            baseTitle = versionName;
+        else baseTitle = String.format("%s - %s", profileName, versionName);
+
+        if (displaySelection) {
+            String played = InstancePlaytimeTracker.formatPlaytime(
+                    InstancePlaytimeTracker.getTotalPlaytimeMs(v.getContext(), i));
+            if (!played.isEmpty()) {
+                baseTitle = baseTitle + "  ·  " + played;
+            }
+        }
+        extendedTextView.setText(baseTitle);
+
+        // Set selected background if needed (Starlight Sapphire Liquid Glass)
+        if(idx == mSelectionIndex && displaySelection) {
+            extendedTextView.setBackgroundColor(0x369CC4FF);
+            extendedTextView.setTextColor(0xFFF8FBFF);
+        }else {
+            extendedTextView.setBackgroundColor(Color.TRANSPARENT);
+            extendedTextView.setTextColor(0xF5F8FBFF);
+        }
+    }
+
+    public void setViewExtra(View v, InstanceAdapterExtra extra) {
+        ExtendedTextView extendedTextView = (ExtendedTextView) v;
+        extendedTextView.setCompoundDrawablesRelative(extra.icon, null, extendedTextView.getCompoundsDrawables()[2], null);
+        extendedTextView.setText(extra.name);
+        extendedTextView.setTextColor(0xFFC4DDFF);
+        extendedTextView.setBackgroundColor(Color.TRANSPARENT);
+    }
+
+    public void setView(View v, int index, boolean displaySelection) {
+        Object object = getItem(index);
+        if(object instanceof DisplayInstance) {
+            setViewInstance(v, (DisplayInstance) object, index, displaySelection);
+        }else if(object instanceof InstanceAdapterExtra) {
+            setViewExtra(v, (InstanceAdapterExtra) object);
+        }
+    }
+
+    public void applySelectionIndex(int index) {
+        mSelectionIndex = index;
+    }
+
+    public void applyInstances(Instances instances) {
+        mInstances = instances;
+        mSelectionIndex = instances.selectedIndex;
+        notifyDataSetChanged();
+    }
+}

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Zyrox Starlight Blossom Capsule Filter Chip -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <gradient android:angle="270" android:startColor="#52E5F0FE" android:endColor="#389ABFF4" />
+            <stroke android:width="1.2dp" android:color="#FAF7FAFF" />
+            <corners android:radius="999dp" />
+        </shape>
+    </item>
+    <item android:state_selected="true">
+        <shape android:shape="rectangle">
+            <gradient android:angle="270" android:startColor="#4AE1EEFE" android:endColor="#3090B9F2" />
+            <stroke android:width="1.15dp" android:color="#F4F5F9FF" />
+            <corners android:radius="999dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient android:angle="270" android:startColor="#20F2F8FF" android:endColor="#12D5E5F9" />
+            <stroke android:width="0.9dp" android:color="#6CE8F1FB" />
+            <corners android:radius="999dp" />
+        </shape>
+    </item>
+</selector>

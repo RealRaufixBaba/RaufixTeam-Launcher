@@ -1,0 +1,148 @@
+package git.raufixteam.launcher;
+
+import static git.raufixteam.launcher.game.platform.Platform.PLATFORM;
+
+import android.content.Intent;
+import android.net.Uri;
+import android.view.Choreographer;
+import android.view.KeyEvent;
+
+import androidx.annotation.Keep;
+
+import git.raufixteam.launcher.utils.lifecycle.ContextExecutor;
+import git.raufixteam.launcher.game.platform.Platform;
+
+import java.io.File;
+
+public class CallbackBridge {
+    public static final Choreographer sChoreographer = Choreographer.getInstance();
+
+    public static volatile int windowWidth, windowHeight;
+    public static volatile float windowRate;
+    public volatile static boolean holdingAlt, holdingCapslock, holdingCtrl,
+            holdingNumlock, holdingShift;
+
+    public static void performClick(int button) {
+        double ox = Platform.cursorX, oy = Platform.cursorY;
+        Platform.sendMouseButtonEvent(button, 1, CallbackBridge.getCurrentMods());
+        sChoreographer.postFrameCallbackDelayed(l -> {
+            Platform.cursorX = ox;
+            Platform.cursorY = oy;
+            Platform.sendMouseButtonEvent(button, 0, CallbackBridge.getCurrentMods());
+        }, 33);
+    }
+
+
+    public static void sendKeyPress(int keyCode) {
+        PLATFORM.sendKeyEvent(keyCode, true, getCurrentMods());
+        PLATFORM.sendKeyEvent(keyCode, false, getCurrentMods());
+    }
+
+    public static void sendMouseButton(int button, boolean status) {
+        CallbackBridge.sendMouseKeycode(button, CallbackBridge.getCurrentMods(), status);
+    }
+
+    public static void sendMouseKeycode(int button, int modifiers, boolean isDown) {
+        Platform.sendMouseButtonEvent(button, isDown ? 1 : 0, modifiers);
+    }
+
+    public static void sendScroll(double xoffset, double yoffset) {
+        PLATFORM.sendScrollEvent(xoffset, yoffset);
+    }
+
+    public static int getCurrentMods() {
+        int currMods = 0;
+        if (holdingAlt) {
+            currMods |= LwjglGlfwKeycode.GLFW_MOD_ALT;
+        } if (holdingCapslock) {
+            currMods |= LwjglGlfwKeycode.GLFW_MOD_CAPS_LOCK;
+        } if (holdingCtrl) {
+            currMods |= LwjglGlfwKeycode.GLFW_MOD_CONTROL;
+        } if (holdingNumlock) {
+            currMods |= LwjglGlfwKeycode.GLFW_MOD_NUM_LOCK;
+        } if (holdingShift) {
+            currMods |= LwjglGlfwKeycode.GLFW_MOD_SHIFT;
+        }
+        return currMods;
+    }
+
+    public static void setModifiers(KeyEvent keyEvent) {
+        CallbackBridge.holdingAlt = keyEvent.isAltPressed();
+        CallbackBridge.holdingCapslock = keyEvent.isCapsLockOn();
+        CallbackBridge.holdingCtrl = keyEvent.isCtrlPressed();
+        CallbackBridge.holdingNumlock = keyEvent.isNumLockOn();
+        CallbackBridge.holdingShift = keyEvent.isShiftPressed();
+    }
+
+    public static void setModifiers(int keyCode, boolean isDown){
+        switch (keyCode){
+            case KeyEvent.KEYCODE_SHIFT_LEFT:
+                CallbackBridge.holdingShift = isDown;
+                return;
+
+            case KeyEvent.KEYCODE_CTRL_LEFT:
+                CallbackBridge.holdingCtrl = isDown;
+                return;
+
+            case KeyEvent.KEYCODE_ALT_LEFT:
+                CallbackBridge.holdingAlt = isDown;
+                return;
+
+            case KeyEvent.KEYCODE_CAPS_LOCK:
+                CallbackBridge.holdingCapslock = isDown;
+                return;
+
+            case KeyEvent.KEYCODE_NUM_LOCK:
+                CallbackBridge.holdingNumlock = isDown;
+        }
+    }
+
+    @Keep
+    public static void openLink(String link) {
+        if (link == null || link.isEmpty()) return;
+        ContextExecutor.executeActivity(ctx -> {
+            try {
+                if (link.startsWith("file:")) {
+                    int truncLength = link.startsWith("file://") ? 7 : 5;
+                    File target = new File(link.substring(truncLength));
+                    File safeTarget = git.raufixteam.launcher.utils.FileUtils.ensureInsideDirectory(
+                            new File(Tools.DIR_GAME_HOME), target);
+                    Tools.openPath(ctx, safeTarget, false);
+                } else {
+                    Uri uri = Uri.parse(link);
+                    String scheme = uri.getScheme();
+                    if (!"https".equalsIgnoreCase(scheme) && !"http".equalsIgnoreCase(scheme)) {
+                        return;
+                    }
+                    Intent intent = new Intent(Intent.ACTION_VIEW, uri);
+                    intent.addCategory(Intent.CATEGORY_BROWSABLE);
+                    ctx.startActivity(intent);
+                }
+            } catch (Throwable th) {
+                Tools.showError(ctx, th);
+            }
+        });
+    }
+
+    @SuppressWarnings("unused")
+    public static void openPath(String path) {
+        if (path == null || path.isEmpty()) return;
+        ContextExecutor.executeActivity(ctx -> {
+            try {
+                File safeTarget = git.raufixteam.launcher.utils.FileUtils.ensureInsideDirectory(
+                        new File(Tools.DIR_GAME_HOME), new File(path));
+                Tools.openPath(ctx, safeTarget, false);
+            } catch (Throwable th) {
+                Tools.showError(ctx, th);
+            }
+        });
+    }
+
+    public static native void minibridgeInit();
+
+    static {
+        System.loadLibrary("mojort");
+        minibridgeInit();
+    }
+}
+

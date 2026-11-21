@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TextView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@android:id/text1"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:minHeight="40dp"
+    android:paddingVertical="8dp"
+    android:paddingHorizontal="12dp"
+    android:background="?attr/selectableItemBackground"
+    android:textColor="@color/zyrox_text_primary"
+    android:textSize="12.5sp"
+    android:fontFamily="sans-serif-medium"
+    android:gravity="center_vertical"
+    tools:text="Zyrox Launcher 1.21.4" />

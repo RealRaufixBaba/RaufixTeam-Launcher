@@ -1,0 +1,312 @@
+package git.raufixteam.launcher.fragments;
+
+import android.content.Context;
+import android.net.Uri;
+import android.os.Bundle;
+import android.view.View;
+import android.widget.Button;
+import android.widget.ScrollView;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
+import androidx.fragment.app.Fragment;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.RandomAccessFile;
+import java.nio.charset.StandardCharsets;
+import java.util.Locale;
+
+import git.raufixteam.launcher.MojoApplication;
+import git.raufixteam.launcher.R;
+import git.raufixteam.launcher.Tools;
+import git.raufixteam.launcher.diagnostics.GraphicsAdvisor;
+import git.raufixteam.launcher.diagnostics.ZyroxCrashAnalyzer;
+import git.raufixteam.launcher.extra.ExtraConstants;
+import git.raufixteam.launcher.extra.ExtraCore;
+import git.raufixteam.launcher.instances.Instance;
+import git.raufixteam.launcher.instances.InstanceManager;
+import git.raufixteam.launcher.instances.Instances;
+import git.raufixteam.launcher.security.LogRedactor;
+import git.raufixteam.launcher.ui.ZyroxLogHighlighter;
+
+/**
+ * Zyrox Smart Crash &amp; Log Inspector (Zyrox Guard) — Dark Liquid Glass monospace terminal with
+ * deterministic local crash diagnosis, 1-Tap Fix &amp; Relaunch shortcuts, and mandatory
+ * {@link LogRedactor} token/UUID/session scrubbing on display, clipboard copy, SAF file export,
+ * and Android share sheet dispatch.
+ */
+public class LogInspectorFragment extends Fragment {
+    public static final String TAG = "LOG_INSPECTOR_FRAGMENT";
+    private static final int MAX_PREVIEW_BYTES = 96 * 1024;
+    private static final long MAX_EXPORT_BYTES = 8L * 1024L * 1024L;
+
+    private TextView mStatusBadge;
+    private TextView mMetaView;
+    private TextView mLogContentView;
+    private ScrollView mTerminalScroll;
+    private View mGuardContainer;
+    private TextView mGuardSummary;
+    private Button mGuardActionBtn;
+    private String mCurrentRedactedLog = "";
+    private ZyroxCrashAnalyzer.Diagnosis mCurrentDiagnosis;
+
+    private final ActivityResultLauncher<String> mExportLogLauncher =
+            registerForActivityResult(
+                    new ActivityResultContracts.CreateDocument("text/plain"),
+                    this::onExportLogUriSelected);
+
+    public LogInspectorFragment() {
+        super(R.layout.fragment_log_inspector);
+    }
+
+    @Override
+    public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
+        mStatusBadge = view.findViewById(R.id.tv_log_status_badge);
+        mMetaView = view.findViewById(R.id.tv_log_meta);
+        mLogContentView = view.findViewById(R.id.tv_log_content);
+        mTerminalScroll = view.findViewById(R.id.sv_log_terminal);
+        mGuardContainer = view.findViewById(R.id.layout_log_guard);
+        mGuardSummary = view.findViewById(R.id.tv_log_guard_summary);
+        mGuardActionBtn = view.findViewById(R.id.btn_log_guard_action);
+
+        view.findViewById(R.id.btn_log_refresh).setOnClickListener(v -> loadLatestLog());
+        view.findViewById(R.id.btn_log_clear).setOnClickListener(v -> clearLatestLog());
+        view.findViewById(R.id.btn_log_copy).setOnClickListener(v -> copyLog(v.getContext()));
+        View exportBtn = view.findViewById(R.id.btn_log_export);
+        if (exportBtn != null) {
+            exportBtn.setOnClickListener(v -> startRedactedExport());
+        }
+        view.findViewById(R.id.btn_log_share).setOnClickListener(v -> Tools.shareLog(v.getContext()));
+        view.findViewById(R.id.btn_log_relaunch).setOnClickListener(v -> {
+            Tools.backToMainMenu(requireActivity());
+            ExtraCore.setValue(ExtraConstants.LAUNCH_GAME, true);
+        });
+
+        loadLatestLog();
+    }
+
+    private void startRedactedExport() {
+        Context ctx = getContext();
+        if (ctx == null) return;
+        File logFile = new File(Tools.DIR_GAME_HOME, "latestlog.txt");
+        if (!logFile.isFile() || logFile.length() == 0L) {
+            Toast.makeText(ctx, R.string.zyrox_log_empty, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        mExportLogLauncher.launch("zyrox-log-redacted.txt");
+    }
+
+    private void onExportLogUriSelected(@Nullable Uri targetUri) {
+        if (targetUri == null || getContext() == null) return;
+        final Context appCtx = getContext().getApplicationContext();
+        final File logFile = new File(Tools.DIR_GAME_HOME, "latestlog.txt");
+        MojoApplication.sExecutorService.execute(() -> {
+            if (!logFile.isFile() || logFile.length() == 0L) {
+                Tools.runOnUiThread(() ->
+                        Toast.makeText(appCtx, R.string.zyrox_log_empty, Toast.LENGTH_SHORT).show());
+                return;
+            }
+            try (OutputStream out = appCtx.getContentResolver().openOutputStream(targetUri, "wt")) {
+                if (out == null) throw new IOException("Cannot open selected destination");
+                LogRedactor.writeRedactedStream(logFile, out, MAX_EXPORT_BYTES);
+                Tools.runOnUiThread(() -> Toast.makeText(
+                        appCtx,
+                        "Exported privacy-redacted log (OAuth tokens & UUIDs stripped).",
+                        Toast.LENGTH_LONG).show());
+            } catch (Exception e) {
+                final String safeErr = LogRedactor.redact(e.getMessage());
+                Tools.runOnUiThread(() -> Toast.makeText(
+                        appCtx,
+                        "Log export failed: " + safeErr,
+                        Toast.LENGTH_LONG).show());
+            }
+        });
+    }
+
+    private void loadLatestLog() {
+        MojoApplication.sExecutorService.execute(() -> {
+            File logFile = new File(Tools.DIR_GAME_HOME, "latestlog.txt");
+            if (!logFile.isFile() || logFile.length() == 0) {
+                Tools.runOnUiThread(() -> {
+                    if (!isAdded()) return;
+                    mCurrentRedactedLog = "";
+                    mCurrentDiagnosis = null;
+                    mMetaView.setText("latestlog.txt  •  0 KB  •  REDACTED");
+                    mLogContentView.setText(R.string.zyrox_log_empty);
+                    if (mGuardContainer != null) mGuardContainer.setVisibility(View.GONE);
+                    applyBadge(false);
+                });
+                return;
+            }
+
+            long totalLen = logFile.length();
+            String rawTail = readLogTail(logFile, MAX_PREVIEW_BYTES);
+            String redacted = LogRedactor.redact(rawTail);
+            ZyroxCrashAnalyzer.Diagnosis diagnosis = ZyroxCrashAnalyzer.analyze(redacted);
+            CharSequence highlighted = ZyroxLogHighlighter.highlightBlock(redacted);
+            boolean hasCrash = diagnosis.category != ZyroxCrashAnalyzer.Category.NO_CRASH_DETECTED;
+            String meta = String.format(Locale.ROOT,
+                    "latestlog.txt  •  %.1f KB  •  AUTO-REDACTED", totalLen / 1024f);
+
+            Tools.runOnUiThread(() -> {
+                if (!isAdded()) return;
+                mCurrentRedactedLog = redacted;
+                mCurrentDiagnosis = diagnosis;
+                mMetaView.setText(meta);
+                mLogContentView.setText(highlighted);
+                applyBadge(hasCrash);
+                bindGuardBanner(diagnosis);
+                if (mTerminalScroll != null) {
+                    mTerminalScroll.post(() -> {
+                        if (isAdded() && mTerminalScroll != null) {
+                            mTerminalScroll.fullScroll(View.FOCUS_DOWN);
+                        }
+                    });
+                }
+            });
+        });
+    }
+
+    private void bindGuardBanner(@NonNull ZyroxCrashAnalyzer.Diagnosis diag) {
+        if (mGuardContainer == null || mGuardSummary == null) return;
+        if (diag.category == ZyroxCrashAnalyzer.Category.NO_CRASH_DETECTED) {
+            mGuardContainer.setVisibility(View.GONE);
+            return;
+        }
+        mGuardContainer.setVisibility(View.VISIBLE);
+        mGuardSummary.setText("ZYROX GUARD: " + LogRedactor.redact(diag.formatCompactSummary()));
+        if (mGuardActionBtn == null) return;
+
+        if (ZyroxCrashAnalyzer.supportsOneTapFix(diag)) {
+            mGuardActionBtn.setVisibility(View.VISIBLE);
+            mGuardActionBtn.setText(ZyroxCrashAnalyzer.getOneTapFixButtonLabel(diag));
+            mGuardActionBtn.setOnClickListener(v -> {
+                final Context appCtx = v.getContext().getApplicationContext();
+                mGuardActionBtn.setEnabled(false);
+                MojoApplication.sExecutorService.execute(() -> {
+                    ZyroxCrashAnalyzer.FixOutcome outcome =
+                            ZyroxCrashAnalyzer.executeOneTapFix(appCtx, diag);
+                    Tools.runOnUiThread(() -> {
+                        if (mGuardActionBtn != null) mGuardActionBtn.setEnabled(true);
+                        Toast.makeText(appCtx, outcome.message, Toast.LENGTH_LONG).show();
+                        if (outcome.applied && isAdded()) {
+                            Tools.backToMainMenu(requireActivity());
+                            ExtraCore.setValue(ExtraConstants.LAUNCH_GAME, true);
+                        }
+                    });
+                });
+            });
+            return;
+        }
+
+        switch (diag.primaryAction) {
+            case OPEN_INSTANCE_STUDIO:
+                mGuardActionBtn.setVisibility(View.VISIBLE);
+                mGuardActionBtn.setText(R.string.zyrox_nav_instances);
+                mGuardActionBtn.setOnClickListener(v -> Tools.swapFragment(
+                        requireActivity(), InstanceEditorFragment.class, InstanceEditorFragment.TAG, null));
+                break;
+            case OPEN_MOD_MANAGER:
+                mGuardActionBtn.setVisibility(View.VISIBLE);
+                mGuardActionBtn.setText(R.string.zyrox_title_content_manager);
+                mGuardActionBtn.setOnClickListener(v -> Tools.swapFragment(
+                        requireActivity(), ContentManagerFragment.class, ContentManagerFragment.TAG, null));
+                break;
+            case OPEN_DOWNLOAD_CENTER:
+                mGuardActionBtn.setVisibility(View.VISIBLE);
+                mGuardActionBtn.setText(R.string.zyrox_title_downloads);
+                mGuardActionBtn.setOnClickListener(v -> Tools.swapFragment(
+                        requireActivity(), DownloadCenterFragment.class, DownloadCenterFragment.TAG, null));
+                break;
+            case SWITCH_SAFE_RENDERER:
+                mGuardActionBtn.setVisibility(View.VISIBLE);
+                mGuardActionBtn.setText(R.string.zyrox_safe_mode_apply);
+                mGuardActionBtn.setOnClickListener(v -> {
+                    GraphicsAdvisor.applyProfile(GraphicsAdvisor.Profile.SAFE_COMPATIBILITY);
+                    Instance cur = Instances.loadSelectedInstance();
+                    if (cur != null && cur.lastKnownGoodRenderer != null) {
+                        InstanceManager.restoreLastKnownGoodRenderer(cur);
+                    }
+                    Toast.makeText(requireContext(), R.string.zyrox_safe_mode_applied, Toast.LENGTH_LONG).show();
+                });
+                break;
+            default:
+                mGuardActionBtn.setVisibility(View.GONE);
+                break;
+        }
+    }
+
+    private void applyBadge(boolean isCrash) {
+        Context ctx = getContext();
+        if (ctx == null || mStatusBadge == null) return;
+        if (isCrash) {
+            mStatusBadge.setText(R.string.zyrox_title_crash_report);
+            mStatusBadge.setBackgroundResource(R.drawable.bg_zyrox_badge_danger);
+            mStatusBadge.setTextColor(ContextCompat.getColor(ctx, R.color.zyrox_danger));
+        } else {
+            mStatusBadge.setText(R.string.zyrox_console_title);
+            mStatusBadge.setBackgroundResource(R.drawable.bg_zyrox_badge);
+            mStatusBadge.setTextColor(ContextCompat.getColor(ctx, R.color.zyrox_lg_text));
+        }
+    }
+
+    private void clearLatestLog() {
+        MojoApplication.sExecutorService.execute(() -> {
+            File logFile = new File(Tools.DIR_GAME_HOME, "latestlog.txt");
+            if (logFile.isFile()) {
+                try (FileOutputStream fos = new FileOutputStream(logFile, false)) {
+                    fos.write(new byte[0]);
+                } catch (IOException ignored) {
+                }
+            }
+            loadLatestLog();
+        });
+    }
+
+    private void copyLog(@Nullable Context context) {
+        if (context == null) return;
+        String rawCandidate = mCurrentRedactedLog.isEmpty()
+                ? (mLogContentView != null ? mLogContentView.getText().toString() : "")
+                : mCurrentRedactedLog;
+        if (mCurrentDiagnosis != null
+                && mCurrentDiagnosis.category != ZyroxCrashAnalyzer.Category.NO_CRASH_DETECTED) {
+            rawCandidate = mCurrentDiagnosis.formatCompactSummary() + "\n\n" + rawCandidate;
+        }
+        if (LogRedactor.copyRedactedToClipboard(context, "zyrox_log", rawCandidate)) {
+            Toast.makeText(context, R.string.zyrox_log_copied, Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    @NonNull
+    public static String readLogTail(@Nullable File file, int maxBytes) {
+        if (file == null || !file.isFile()) return "";
+        try (RandomAccessFile raf = new RandomAccessFile(file, "r")) {
+            long len = raf.length();
+            if (len <= 0) return "";
+            int toRead = (int) Math.min(len, maxBytes);
+            long offset = len - toRead;
+            raf.seek(offset);
+            byte[] buf = new byte[toRead];
+            raf.readFully(buf);
+            String text = new String(buf, StandardCharsets.UTF_8);
+            if (offset > 0) {
+                int firstNl = text.indexOf('\n');
+                if (firstNl >= 0 && firstNl + 1 < text.length()) {
+                    text = "... [earlier lines truncated — use EXPORT/SHARE LOG for full redacted file]\n"
+                            + text.substring(firstNl + 1);
+                }
+            }
+            return LogRedactor.redact(text);
+        } catch (IOException e) {
+            return LogRedactor.redact("Failed to read log: " + e.getMessage());
+        }
+    }
+}

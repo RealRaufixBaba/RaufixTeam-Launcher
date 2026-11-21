@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Zyrox Starlight Celestial Frosted Liquid Glass Right Home Dock (Vivid Scene + Crisp Legibility) -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 1. Smoked celestial-midnight translucent body -->
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="0"
+                android:startColor="#340B1120"
+                android:centerColor="#400C1322"
+                android:endColor="#4C0A101F" />
+        </shape>
+    </item>
+    <!-- 2. Delicate starlight-ice top-down skylight sheen -->
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="270"
+                android:startColor="#18F0F7FF"
+                android:centerColor="#06E5EEFB"
+                android:endColor="#16070D1A" />
+        </shape>
+    </item>
+    <!-- 3. Luminous vertical starlight-crystal refractive edge separating dock from live scene -->
+    <item android:width="1.2dp" android:gravity="start">
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="270"
+                android:startColor="#48F2F8FF"
+                android:centerColor="#B8E5F0FE"
+                android:endColor="#48F2F8FF" />
+        </shape>
+    </item>
+</layer-list>

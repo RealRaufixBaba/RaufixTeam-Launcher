@@ -1,0 +1,369 @@
+package git.raufixteam.launcher.utils.scoped;
+
+import android.annotation.TargetApi;
+import android.content.ContentResolver;
+import android.content.res.AssetFileDescriptor;
+import android.database.Cursor;
+import android.database.MatrixCursor;
+import android.graphics.Point;
+import android.net.Uri;
+import android.os.CancellationSignal;
+import android.os.ParcelFileDescriptor;
+import android.provider.DocumentsContract;
+import android.provider.DocumentsContract.Document;
+import android.provider.DocumentsContract.Root;
+import android.provider.DocumentsProvider;
+import android.webkit.MimeTypeMap;
+
+import androidx.annotation.Nullable;
+
+import git.raufixteam.launcher.BuildConfig;
+import git.raufixteam.launcher.R;
+import git.raufixteam.launcher.Tools;
+
+import org.apache.commons.io.FileUtils;
+
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Locale;
+
+/**
+ * Storage Access Framework DocumentsProvider exposing only the game home directory
+ * with strict canonical path containment so internal app storage (such as account tokens)
+ * can never be traversed or accessed.
+ */
+public class FolderProvider extends DocumentsProvider {
+
+    private static final String ALL_MIME_TYPES = "*/*";
+
+    private File BASE_DIR;
+    private ContentResolver mContentResolver;
+    private String mStorageProviderAuthority;
+
+    private static final String[] DEFAULT_ROOT_PROJECTION = new String[]{
+            Root.COLUMN_ROOT_ID,
+            Root.COLUMN_MIME_TYPES,
+            Root.COLUMN_FLAGS,
+            Root.COLUMN_ICON,
+            Root.COLUMN_TITLE,
+            Root.COLUMN_SUMMARY,
+            Root.COLUMN_DOCUMENT_ID,
+            Root.COLUMN_AVAILABLE_BYTES
+    };
+
+    private static final String[] DEFAULT_DOCUMENT_PROJECTION = new String[]{
+            Document.COLUMN_DOCUMENT_ID,
+            Document.COLUMN_MIME_TYPE,
+            Document.COLUMN_DISPLAY_NAME,
+            Document.COLUMN_LAST_MODIFIED,
+            Document.COLUMN_FLAGS,
+            Document.COLUMN_SIZE
+    };
+
+    private static String sanitizeChildName(String displayName) throws FileNotFoundException {
+        if (displayName == null) throw new FileNotFoundException("Invalid document name");
+        String trimmed = displayName.trim();
+        if (trimmed.isEmpty() || ".".equals(trimmed) || "..".equals(trimmed)
+                || trimmed.indexOf('/') >= 0 || trimmed.indexOf('\\') >= 0 || trimmed.indexOf('\0') >= 0) {
+            throw new FileNotFoundException("Invalid document name");
+        }
+        return trimmed;
+    }
+
+    private File verifyInsideBaseDir(File candidate) throws FileNotFoundException {
+        if (BASE_DIR == null || candidate == null) {
+            throw new FileNotFoundException("Storage root unavailable");
+        }
+        try {
+            return git.raufixteam.launcher.utils.FileUtils.ensureInsideDirectory(BASE_DIR, candidate);
+        } catch (IOException e) {
+            throw new SecurityException("Document path is outside game directory");
+        }
+    }
+
+    @Override
+    public Cursor queryRoots(String[] projection) {
+        final MatrixCursor result = new MatrixCursor(projection != null ? projection : DEFAULT_ROOT_PROJECTION);
+        if (getContext() == null || BASE_DIR == null) return result;
+        final String applicationName = getContext().getString(R.string.app_short_name);
+
+        String summary = BuildConfig.VERSION_NAME;
+        if (BuildConfig.DEBUG) {
+            summary = "(" + getContext().getString(R.string.generic_debug) + ") " + summary;
+        }
+
+        final MatrixCursor.RowBuilder row = result.newRow();
+        row.add(Root.COLUMN_ROOT_ID, getDocIdForFile(BASE_DIR));
+        row.add(Root.COLUMN_DOCUMENT_ID, getDocIdForFile(BASE_DIR));
+        row.add(Root.COLUMN_SUMMARY, summary);
+        row.add(Root.COLUMN_FLAGS, Root.FLAG_SUPPORTS_CREATE | Root.FLAG_SUPPORTS_SEARCH | Root.FLAG_SUPPORTS_IS_CHILD);
+        row.add(Root.COLUMN_TITLE, applicationName);
+        row.add(Root.COLUMN_MIME_TYPES, ALL_MIME_TYPES);
+        row.add(Root.COLUMN_AVAILABLE_BYTES, BASE_DIR.getFreeSpace());
+        row.add(Root.COLUMN_ICON, R.mipmap.ic_launcher);
+        return result;
+    }
+
+    @Override
+    public Cursor queryDocument(String documentId, String[] projection) throws FileNotFoundException {
+        final MatrixCursor result = new MatrixCursor(projection != null ? projection : DEFAULT_DOCUMENT_PROJECTION);
+        result.setNotificationUri(mContentResolver, createUriForDocId(documentId));
+        includeFile(result, documentId, null);
+        return result;
+    }
+
+    @Override
+    public Cursor queryChildDocuments(String parentDocumentId, String[] projection, String sortOrder) throws FileNotFoundException {
+        final MatrixCursor result = new MatrixCursor(projection != null ? projection : DEFAULT_DOCUMENT_PROJECTION);
+        final File parent = getFileForDocId(parentDocumentId);
+        final File[] children = parent.listFiles();
+        if (children == null) throw new FileNotFoundException("Unable to list directory");
+        for (File file : children) {
+            if (git.raufixteam.launcher.utils.FileUtils.isInsideDirectory(BASE_DIR, file)) {
+                includeFile(result, null, file);
+            }
+        }
+        result.setNotificationUri(mContentResolver, createUriForDocId(parentDocumentId));
+        return result;
+    }
+
+    @Override
+    public ParcelFileDescriptor openDocument(final String documentId, String mode, CancellationSignal signal) throws FileNotFoundException {
+        final File file = getFileForDocId(documentId);
+        final int accessMode = ParcelFileDescriptor.parseMode(mode);
+        return ParcelFileDescriptor.open(file, accessMode);
+    }
+
+    @Override
+    public AssetFileDescriptor openDocumentThumbnail(String documentId, Point sizeHint, CancellationSignal signal) throws FileNotFoundException {
+        final File file = getFileForDocId(documentId);
+        final ParcelFileDescriptor pfd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY);
+        return new AssetFileDescriptor(pfd, 0, file.length());
+    }
+
+    @Override
+    public boolean onCreate() {
+        if (getContext() == null) return false;
+        if (Tools.checkStorageRoot(getContext())) {
+            Tools.initStorageConstants(getContext());
+        } else {
+            return false;
+        }
+        BASE_DIR = new File(Tools.DIR_GAME_HOME);
+        mContentResolver = getContext().getContentResolver();
+        mStorageProviderAuthority = getContext().getString(R.string.storageProviderAuthorities);
+        return true;
+    }
+
+    @Override
+    public String createDocument(String parentDocumentId, String mimeType, String displayName) throws FileNotFoundException {
+        File parentDir = getFileForDocId(parentDocumentId);
+        String safeName = sanitizeChildName(displayName);
+        File newFile = verifyInsideBaseDir(new File(parentDir, safeName));
+        int noConflictId = 2;
+        while (newFile.exists()) {
+            newFile = verifyInsideBaseDir(new File(parentDir, safeName + " (" + noConflictId++ + ")"));
+        }
+        try {
+            boolean succeeded = Document.MIME_TYPE_DIR.equals(mimeType)
+                    ? newFile.mkdir()
+                    : newFile.createNewFile();
+            if (!succeeded) {
+                throw new FileNotFoundException("Failed to create document");
+            }
+        } catch (IOException e) {
+            throw new FileNotFoundException("Failed to create document");
+        }
+        notifyChange(createUriForDocId(parentDocumentId));
+        return getDocIdForFile(newFile);
+    }
+
+    @Override
+    public String renameDocument(String documentId, String displayName) throws FileNotFoundException {
+        File sourceFile = getFileForDocId(documentId);
+        if (sourceFile.equals(BASE_DIR)) throw new FileNotFoundException("Cannot rename root");
+        File sourceParent = sourceFile.getParentFile();
+        if (sourceParent == null) throw new FileNotFoundException("Cannot rename root");
+        String safeName = sanitizeChildName(displayName);
+        File targetFile = verifyInsideBaseDir(new File(sourceParent, safeName));
+        if (!sourceFile.renameTo(targetFile)) {
+            throw new FileNotFoundException("Could not rename document");
+        }
+        return getDocIdForFile(targetFile);
+    }
+
+    @Override
+    public String moveDocument(String sourceDocumentId, String sourceParentDocumentId, String targetParentDocumentId) throws FileNotFoundException {
+        File sourceFile = getFileForDocId(sourceDocumentId);
+        if (sourceFile.equals(BASE_DIR)) throw new FileNotFoundException("Cannot move root");
+        File targetParent = getFileForDocId(targetParentDocumentId);
+        File targetFile = verifyInsideBaseDir(new File(targetParent, sourceFile.getName()));
+        if (!sourceFile.renameTo(targetFile)) {
+            throw new FileNotFoundException("Failed to move document");
+        }
+        return getDocIdForFile(targetFile);
+    }
+
+    @Override
+    public void removeDocument(String documentId, String parentDocumentId) throws FileNotFoundException {
+        deleteDocument(documentId);
+    }
+
+    @Override
+    public void deleteDocument(String documentId) throws FileNotFoundException {
+        File file = getFileForDocId(documentId);
+        if (file.equals(BASE_DIR)) throw new FileNotFoundException("Cannot delete root");
+        if (file.isDirectory()) {
+            try {
+                FileUtils.deleteDirectory(file);
+            } catch (IOException e) {
+                throw new FileNotFoundException("Failed to delete directory");
+            }
+        } else if (!file.delete()) {
+            throw new FileNotFoundException("Failed to delete file");
+        }
+        File parent = file.getParentFile();
+        if (parent != null && git.raufixteam.launcher.utils.FileUtils.isInsideDirectory(BASE_DIR, parent)) {
+            notifyChange(createUriForFile(parent));
+        }
+    }
+
+    @Override
+    public String getDocumentType(String documentId) throws FileNotFoundException {
+        File file = getFileForDocId(documentId);
+        return getMimeType(file);
+    }
+
+    @Override
+    public Cursor querySearchDocuments(String rootId, String query, String[] projection) throws FileNotFoundException {
+        final MatrixCursor result = new MatrixCursor(projection != null ? projection : DEFAULT_DOCUMENT_PROJECTION);
+        if (query == null || query.isEmpty()) return result;
+        final String lowerQuery = query.toLowerCase(Locale.ROOT);
+        final File parent = getFileForDocId(rootId);
+
+        final LinkedList<File> pending = new LinkedList<>();
+        pending.add(parent);
+
+        final int MAX_SEARCH_RESULTS = 50;
+        while (!pending.isEmpty() && result.getCount() < MAX_SEARCH_RESULTS) {
+            final File file = pending.removeFirst();
+            if (!git.raufixteam.launcher.utils.FileUtils.isInsideDirectory(BASE_DIR, file)) {
+                continue;
+            }
+            if (file.isDirectory()) {
+                File[] listing = file.listFiles();
+                if (listing != null) Collections.addAll(pending, listing);
+            } else if (file.getName().toLowerCase(Locale.ROOT).contains(lowerQuery)) {
+                includeFile(result, null, file);
+            }
+        }
+
+        return result;
+    }
+
+    @Override
+    public boolean isChildDocument(String parentDocumentId, String documentId) {
+        if (parentDocumentId == null || documentId == null) return false;
+        File parent = new File(parentDocumentId);
+        File child = new File(documentId);
+        return git.raufixteam.launcher.utils.FileUtils.isInsideDirectory(BASE_DIR, parent)
+                && git.raufixteam.launcher.utils.FileUtils.isInsideDirectory(parent, child);
+    }
+
+    private static String getDocIdForFile(File file) {
+        return file.getAbsolutePath();
+    }
+
+    private File getFileForDocId(String docId) throws FileNotFoundException {
+        if (docId == null || docId.isEmpty()) {
+            throw new FileNotFoundException("Empty document id");
+        }
+        final File f = verifyInsideBaseDir(new File(docId));
+        if (!f.exists()) throw new FileNotFoundException("Document not found");
+        return f;
+    }
+
+    private static String getMimeType(File file) {
+        if (file.isDirectory()) {
+            return Document.MIME_TYPE_DIR;
+        } else {
+            final String name = file.getName();
+            final int lastDot = name.lastIndexOf('.');
+            if (lastDot >= 0) {
+                final String extension = name.substring(lastDot + 1).toLowerCase(Locale.ROOT);
+                final String mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension);
+                if (mime != null) return mime;
+            }
+            return "application/octet-stream";
+        }
+    }
+
+    private void includeFile(MatrixCursor result, String docId, File file)
+            throws FileNotFoundException {
+        if (docId == null) {
+            verifyInsideBaseDir(file);
+            docId = getDocIdForFile(file);
+        } else {
+            file = getFileForDocId(docId);
+        }
+
+        int flags = 0;
+        if (file.isDirectory()) {
+            if (file.canWrite()) flags |= Document.FLAG_DIR_SUPPORTS_CREATE;
+        } else if (file.canWrite()) {
+            flags |= Document.FLAG_SUPPORTS_WRITE;
+        }
+        File parent = file.getParentFile();
+        if (parent != null && !file.equals(BASE_DIR) && parent.canWrite()) {
+            flags |= Document.FLAG_SUPPORTS_DELETE | Document.FLAG_SUPPORTS_RENAME | Document.FLAG_SUPPORTS_MOVE;
+        }
+
+        final String displayName = file.getName();
+        final String mimeType = getMimeType(file);
+        if (mimeType.startsWith("image/")) flags |= Document.FLAG_SUPPORTS_THUMBNAIL;
+
+        final MatrixCursor.RowBuilder row = result.newRow();
+        row.add(Document.COLUMN_DOCUMENT_ID, docId);
+        row.add(Document.COLUMN_DISPLAY_NAME, displayName);
+        row.add(Document.COLUMN_SIZE, file.length());
+        row.add(Document.COLUMN_MIME_TYPE, mimeType);
+        row.add(Document.COLUMN_LAST_MODIFIED, file.lastModified());
+        row.add(Document.COLUMN_FLAGS, flags);
+        row.add(Document.COLUMN_ICON, R.mipmap.ic_launcher);
+    }
+
+    @Override
+    @TargetApi(26)
+    public DocumentsContract.Path findDocumentPath(@Nullable String parentDocumentId, String childDocumentId) throws FileNotFoundException {
+        File source = (parentDocumentId != null) ? getFileForDocId(parentDocumentId) : BASE_DIR;
+        File destination = getFileForDocId(childDocumentId);
+        if (!git.raufixteam.launcher.utils.FileUtils.isInsideDirectory(source, destination)) {
+            throw new FileNotFoundException("Document is not inside parent");
+        }
+        List<String> pathIds = new ArrayList<>();
+        while (destination != null && !source.equals(destination)) {
+            pathIds.add(getDocIdForFile(destination));
+            destination = destination.getParentFile();
+        }
+        pathIds.add(getDocIdForFile(source));
+        Collections.reverse(pathIds);
+        return new DocumentsContract.Path(getDocIdForFile(source), pathIds);
+    }
+
+    private Uri createUriForDocId(String documentId) throws FileNotFoundException {
+        return createUriForFile(getFileForDocId(documentId));
+    }
+
+    private Uri createUriForFile(File file) {
+        return DocumentsContract.buildDocumentUri(mStorageProviderAuthority, file.getAbsolutePath());
+    }
+
+    private void notifyChange(Uri uri) {
+        mContentResolver.notifyChange(uri, null);
+    }
+}

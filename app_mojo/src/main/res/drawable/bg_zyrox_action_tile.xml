@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Zyrox Starlight Crystal Liquid Glass Home Studio Action Tile -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item android:state_pressed="true">
+        <layer-list>
+            <item>
+                <shape android:shape="rectangle">
+                    <gradient
+                        android:angle="270"
+                        android:startColor="#4EE5F0FE"
+                        android:centerColor="#3097BEF4"
+                        android:endColor="#42B7D3F9" />
+                    <stroke android:width="1.3dp" android:color="#F8F7FAFF" />
+                    <corners android:radius="13dp" />
+                </shape>
+            </item>
+            <item android:left="10dp" android:top="3dp" android:right="10dp" android:height="1.5dp" android:gravity="top">
+                <shape android:shape="rectangle">
+                    <gradient android:angle="0" android:startColor="#00FFFFFF" android:centerColor="#C8FFFFFF" android:endColor="#00FFFFFF" />
+                    <corners android:radius="1dp" />
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <gradient android:angle="270" android:startColor="#3CEBF3FE" android:endColor="#28BBD5F8" />
+            <stroke android:width="1.5dp" android:color="#FFFAFCFF" />
+            <corners android:radius="13dp" />
+        </shape>
+    </item>
+
+    <item>
+        <layer-list>
+            <!-- Subtle plum glass base for crisp contrast over sunlit cherry blossoms -->
+            <item>
+                <shape android:shape="rectangle">
+                    <solid android:color="#280A101E" />
+                    <stroke android:width="0.8dp" android:color="#34080D18" />
+                    <corners android:radius="13dp" />
+                </shape>
+            </item>
+            <!-- Iridescent starlight-ice refractive sheen + bright bevel -->
+            <item android:left="0.7dp" android:top="0.7dp" android:right="0.7dp" android:bottom="0.7dp">
+                <shape android:shape="rectangle">
+                    <gradient
+                        android:angle="270"
+                        android:startColor="#28F4F9FF"
+                        android:centerColor="#10E5EEFB"
+                        android:endColor="#1CC7DCF8" />
+                    <stroke android:width="1.05dp" android:color="#B4F0F7FF" />
+                    <corners android:radius="12.3dp" />
+                </shape>
+            </item>
+            <!-- Top liquid specular filament -->
+            <item android:left="11dp" android:top="2.8dp" android:right="11dp" android:height="1.3dp" android:gravity="top">
+                <shape android:shape="rectangle">
+                    <gradient android:angle="0" android:startColor="#00FFFFFF" android:centerColor="#84FFFFFF" android:endColor="#00FFFFFF" />
+                    <corners android:radius="1dp" />
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+
+</selector>
