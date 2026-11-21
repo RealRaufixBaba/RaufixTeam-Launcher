@@ -100,8 +100,8 @@ jobs:
           set +e
           gradle --no-daemon :app_mojo:assembleFullRelease --stacktrace --info > assemble.log 2>&1
           EXIT_CODE=$?
-          # Echo last 50 lines of log as error annotation
-          tail -50 assemble.log 2>/dev/null | while read line; do echo "::error::[ASSEMBLE] $line"; done
+          # Echo first 80 lines of log as error annotation (contains actual error message)
+          head -80 assemble.log 2>/dev/null | while read line; do echo "::error::[ASSEMBLE] $line"; done
           echo "::error::Assemble exit code: $EXIT_CODE"
           if [ $EXIT_CODE -ne 0 ]; then
             exit 1
