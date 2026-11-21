@@ -203,13 +203,14 @@ class AssetTaskRegistrar {
     }
 
     def setVariant(variant) {
-        variantName = variant.getName().capitalize()
+        def variantNameValue = variant.name.toString().capitalize()
+        variantName = variantNameValue
         mergeAssetsTask = variant.getPreBuildProvider().get()
 
         targetAssetsDir = new File(project.projectDir, "build/intermediates/remote_asset_set/${variantName.toLowerCase()}/")
         createDirectories(targetAssetsDir)
 
-        project.android.sourceSets[variant.getName()].assets.srcDirs += targetAssetsDir.absolutePath
+        project.android.sourceSets[variantName].assets.srcDirs += targetAssetsDir.absolutePath
     }
 
     static def createDirectories(File location) {
@@ -306,7 +307,7 @@ afterEvaluate {
         registrar.projectJarDependency project(":forge_installer"), "components/forge_installer"
         registrar.projectJarDependency project(":NoBlocklist"), "components/noblocklist"
 
-        if (variant.getName().toLowerCase().contains("full")) {
+        if (variant.name.toString().toLowerCase().contains("full")) {
             registrar.jreRuntimeDependency 8, "components/jre"
         }
 
