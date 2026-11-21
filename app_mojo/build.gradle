@@ -336,58 +336,7 @@ afterEvaluate {
 
     android.applicationVariants.configureEach { variant ->
         registrar.setVariant(variant)
-        println "::error::[BUILD_DEBUG] 9 after setVariant: regVariantName=$regVariantName"
-
-        try {
-            registrar.projectJarDependency project(":forge_installer"), "components/forge_installer"
-            println "::error::[BUILD_DEBUG] 10 forge_installer ok"
-        } catch (Exception e) {
-            println "::error::[BUILD_DEBUG] 10 FAILED forge_installer: ${e.class.name}: ${e.message}"
-            throw e
-        }
-
-        try {
-            registrar.projectJarDependency project(":NoBlocklist"), "components/noblocklist"
-            println "::error::[BUILD_DEBUG] 11 NoBlocklist ok"
-        } catch (Exception e) {
-            println "::error::[BUILD_DEBUG] 11 FAILED NoBlocklist: ${e.class.name}: ${e.message}"
-            throw e
-        }
-
-        def flavorName = variant.productFlavors.empty ? "" : variant.productFlavors[0].name.toString()
-        if (flavorName.toLowerCase().contains("full")) {
-            try {
-                registrar.jreRuntimeDependency 8, "components/jre"
-                println "::error::[BUILD_DEBUG] 12 jre ok"
-            } catch (Exception e) {
-                println "::error::[BUILD_DEBUG] 12 FAILED jre: ${e.class.name}: ${e.message}"
-                throw e
-            }
-        }
-
-        def cacioJarUrl = "https://jitpack.io/com/github/MojoLauncher/%1\\$s/%2\\$s/%3\\$s/%2\\$s-%3\\$s%4\\$s.jar"
-
-        try {
-            registrar.onlineJarDependency cacioJarUrl, "caciocavallo", "cacio-shared", "d0efb5aaba", "", "components/caciocavallo"
-            println "::error::[BUILD_DEBUG] 13 cacio-shared ok"
-        } catch (Exception e) {
-            println "::error::[BUILD_DEBUG] 13 FAILED cacio-shared: ${e.class.name}: ${e.message}"
-            throw e
-        }
-        try {
-            registrar.onlineJarDependency cacioJarUrl, "caciocavallo", "cacio-androidnw", "d0efb5aaba", "", "components/caciocavallo"
-            println "::error::[BUILD_DEBUG] 14 cacio-androidnw ok"
-        } catch (Exception e) {
-            println "::error::[BUILD_DEBUG] 14 FAILED cacio-androidnw: ${e.class.name}: ${e.message}"
-            throw e
-        }
-        try {
-            registrar.onlineJarDependency cacioJarUrl, "caciocavallo17", "cacio-tta", "-411454b006-1", "-jar-with-dependencies", "components/caciocavallo17"
-            println "::error::[BUILD_DEBUG] 15 cacio-tta ok"
-        } catch (Exception e) {
-            println "::error::[BUILD_DEBUG] 15 FAILED cacio-tta: ${e.class.name}: ${e.message}"
-            throw e
-        }
+        println "::error::[BUILD_DEBUG] 9 after setVariant for variant=$variant"
     }
 }
 
