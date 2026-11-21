@@ -38,15 +38,13 @@ jobs:
       - name: Setup Android SDK + NDK
         uses: android-actions/setup-android@v4
         with:
-          sdk-path: |
-            android-sdk
+          accept-android-sdk-licenses: true
           packages: |
             platform-tools
             platforms;android-36
             build-tools;36.0.0
             ndk;${{ env.NDK_VERSION }}
             cmake;3.22.1
-          licenses: android-sdk-preview,android-sdk-license,google-gdk-license
 
       - name: Write local.properties
         run: |
@@ -79,6 +77,7 @@ jobs:
           name: unit-test-reports
           path: app_mojo/build/reports/tests/testFullReleaseUnitTest/
           retention-days: 7
+          if-no-files-found: warn
 
       - name: Upload lint reports
         if: always()
@@ -87,6 +86,7 @@ jobs:
           name: lint-reports
           path: app_mojo/build/reports/lints/
           retention-days: 7
+          if-no-files-found: warn
 
       - name: Upload release APK
         if: success()
@@ -115,15 +115,13 @@ jobs:
       - name: Setup Android SDK + NDK
         uses: android-actions/setup-android@v4
         with:
-          sdk-path: |
-            android-sdk
+          accept-android-sdk-licenses: true
           packages: |
             platform-tools
             platforms;android-36
             build-tools;36.0.0
             ndk;${{ env.NDK_VERSION }}
             cmake;3.22.1
-          licenses: android-sdk-preview,android-sdk-license,google-gdk-license
 
       - name: Write local.properties
         run: |
