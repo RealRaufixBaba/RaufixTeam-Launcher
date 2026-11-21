@@ -78,6 +78,14 @@ jobs:
           fi
           exit $EXIT_CODE
 
+      - name: Show unit test log (debug)
+        if: always()
+        run: |
+          echo "=== unit-test.log exists? ==="
+          ls -la unit-test.log 2>/dev/null || echo "FILE NOT FOUND"
+          echo "=== unit-test.log content ==="
+          cat unit-test.log 2>/dev/null || echo "EMPTY OR MISSING"
+
       - name: Upload unit test debug log
         if: always()
         uses: actions/upload-artifact@v4
