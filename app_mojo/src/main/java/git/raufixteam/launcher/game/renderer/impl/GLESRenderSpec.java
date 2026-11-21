@@ -14,7 +14,7 @@ import java.io.File;
 import java.util.Map;
 
 import git.raufixteam.launcher.R;
-import git.raufixteam.launcherexec.MojoExec;
+import git.artdeell.mojoexec.MojoExec;
 
 /**
  * Base GLES RenderSpec. Represents a desktop OpenGL wrapper running on-top of {@link GLESProvider}

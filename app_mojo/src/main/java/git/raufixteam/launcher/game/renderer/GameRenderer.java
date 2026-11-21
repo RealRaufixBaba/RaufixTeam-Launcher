@@ -29,7 +29,7 @@ import java.util.Map;
 
 import git.raufixteam.launcher.vulkan.DriverManager;
 import git.raufixteam.launcher.vulkan.driver.Driver;
-import git.raufixteam.launcherexec.MojoExec;
+import git.artdeell.mojoexec.MojoExec;
 
 /*
  How to add an extra renderer (guide 2026 mediafire works):

@@ -14,7 +14,7 @@ import git.raufixteam.launcher.Tools;
 import git.raufixteam.launcher.game.renderer.RenderSpec;
 import git.raufixteam.launcher.game.renderer.def.Renderers;
 import git.raufixteam.launcher.utils.GpuUtils;
-import git.raufixteam.launcherexec.MojoExec;
+import git.artdeell.mojoexec.MojoExec;
 
 /**
  * CPU software-rasterizer renderer backend (Mesa softpipe / llvmpipe).

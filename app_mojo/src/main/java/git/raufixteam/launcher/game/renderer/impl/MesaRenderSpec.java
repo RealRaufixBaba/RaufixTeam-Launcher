@@ -23,7 +23,7 @@ import git.raufixteam.launcher.utils.GpuUtils.GpuArchitecture;
 import git.raufixteam.launcher.utils.plugins.LibraryPlugin;
 import git.raufixteam.launcher.vulkan.driver.BuiltinDriver;
 import git.raufixteam.launcher.vulkan.driver.Driver;
-import git.raufixteam.launcherexec.MojoExec;
+import git.artdeell.mojoexec.MojoExec;
 
 /**
  * Mesa3D RenderSpec providing Desktop Mesa, Vulkan Zink (with Adreno Turnip {@code .adpkg}

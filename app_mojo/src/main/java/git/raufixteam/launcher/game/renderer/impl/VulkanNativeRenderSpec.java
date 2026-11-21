@@ -18,7 +18,7 @@ import git.raufixteam.launcher.utils.GpuUtils;
 import git.raufixteam.launcher.utils.plugins.LibraryPlugin;
 import git.raufixteam.launcher.vulkan.DriverManager;
 import git.raufixteam.launcher.vulkan.driver.Driver;
-import git.raufixteam.launcherexec.MojoExec;
+import git.artdeell.mojoexec.MojoExec;
 
 /**
  * Native Vulkan renderer backend.

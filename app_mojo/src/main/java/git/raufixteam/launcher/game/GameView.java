@@ -44,7 +44,7 @@ import git.raufixteam.launcher.game.render.TextureViewSurfaceProvider;
 import git.raufixteam.launcher.utils.MCOptionUtils;
 
 import git.raufixteam.launcher.R;
-import git.raufixteam.launcherexec.MojoExec;
+import git.artdeell.mojoexec.MojoExec;
 
 import static git.raufixteam.launcher.game.platform.Platform.PLATFORM;
 
