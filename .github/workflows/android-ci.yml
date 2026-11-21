@@ -63,6 +63,11 @@ jobs:
           timeout 1800 gradle --no-daemon --max-workers=1 :app_mojo:assembleFullRelease --stacktrace 2>&1 | tee assemble.log
           EXIT_CODE=${PIPESTATUS[0]}
           echo "::error::Assemble exit code: $EXIT_CODE"
+          if [ -f assemble.log ]; then
+            tail -50 assemble.log 2>/dev/null | while IFS= read -r line; do
+              echo "::error::${line}"
+            done
+          fi
           {
             echo "## Assemble Output"
             echo ""
