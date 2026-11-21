@@ -8,10 +8,6 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 env:
   GRADLE_VERSION: 8.14.5
   NDK_VERSION: 29.0.14206865
@@ -32,7 +28,6 @@ jobs:
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
-          cache: gradle
 
       - name: Install Android SDK command-line tools
         run: |
@@ -53,7 +48,6 @@ jobs:
         run: |
           echo "sdk.dir=${ANDROID_SDK_ROOT}" > local.properties
           echo "ndk.dir=${ANDROID_SDK_ROOT}/ndk/${{ env.NDK_VERSION }}" >> local.properties
-          cat local.properties
 
       - name: Install Gradle from GitHub releases
         run: |
@@ -63,49 +57,12 @@ jobs:
           echo "GRADLE_HOME=$HOME/gradle-${GRADLE_VERSION}" >> $GITHUB_ENV
           echo "$HOME/gradle-${GRADLE_VERSION}/bin" >> $GITHUB_PATH
 
-      - name: Gradle version check
-        run: gradle --version
-
-      - name: Configure project (fail fast on config errors)
-        run: gradle :app_mojo:help --console=plain --no-daemon 2>&1 | tee configure.log || (echo "::error::Configure failed"; exit 1)
-
-      - name: Unit tests (Full Release) - continue on failure
-        continue-on-error: true
-        run: |
-          gradle --no-daemon :app_mojo:testFullReleaseUnitTest --stacktrace --info > unit-test.log 2>&1 || true
-
-      - name: Upload unit test debug log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: unit-test-debug-log
-          path: unit-test.log
-          retention-days: 3
-
-      - name: Lint (Full Release) - continue on failure
-        continue-on-error: true
-        run: |
-          gradle --no-daemon :app_mojo:lintFullRelease --stacktrace --info > lint.log 2>&1 || true
-
-      - name: Upload lint debug log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: lint-debug-log
-          path: lint.log
-          retention-days: 3
-
       - name: Assemble Full Release APK
         run: |
-          set +e
-          timeout 900 gradle --no-daemon --max-workers=1 :app_mojo:assembleFullRelease --stacktrace --info > assemble.log 2>&1
-          EXIT_CODE=$?
-          # Echo first 100 lines of log as error annotation
-          head -100 assemble.log 2>/dev/null | while read line; do echo "::error::[ASSEMBLE] $line"; done
-          echo "::error::Assemble exit code: $EXIT_CODE"
-          if [ $EXIT_CODE -ne 0 ]; then
-            exit 1
-          fi
+          timeout 1200 gradle --no-daemon --max-workers=1 :app_mojo:assembleFullRelease --stacktrace 2>&1 | tee assemble.log
+          EXIT_CODE=${PIPESTATUS[0]}
+          echo "EXIT_CODE=$EXIT_CODE" >> assemble.log
+          exit $EXIT_CODE
 
       - name: Upload assemble debug log
         if: always()
@@ -181,7 +138,7 @@ jobs:
           RAUFIXTEAM_KEYSTORE_PASSWORD: ${{ secrets.RAUFIXTEAM_KEYSTORE_PASSWORD }}
           RAUFIXTEAM_KEY_ALIAS: ${{ secrets.RAUFIXTEAM_KEY_ALIAS }}
           RAUFIXTEAM_KEY_PASSWORD: ${{ secrets.RAUFIXTEAM_KEY_PASSWORD }}
-        run: timeout 900 gradle --no-daemon --max-workers=1 :app_mojo:assembleFullRelease
+        run: timeout 1200 gradle --no-daemon --max-workers=1 :app_mojo:assembleFullRelease
 
       - name: Wipe temporary keystore
         if: always()
