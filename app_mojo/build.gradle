@@ -207,7 +207,7 @@ class AssetTaskRegistrar {
         def buildTypeName = variant.buildType.name.toString().capitalize()
         def variantNameRaw = (flavorName + buildTypeName)
         variantName = variantNameRaw.capitalize()
-        System.err.println "DEBUG_VARIANT: name=$variantName raw=$variantNameRaw flavor=$flavorName buildType=$buildTypeName"
+        println "::error::[DEBUG_VARIANT] name=$variantName raw=$variantNameRaw flavor=$flavorName buildType=$buildTypeName"
         mergeAssetsTask = variant.getPreBuildProvider().get()
 
         targetAssetsDir = new File(project.projectDir, "build/intermediates/remote_asset_set/${variantNameRaw.toLowerCase()}/")
