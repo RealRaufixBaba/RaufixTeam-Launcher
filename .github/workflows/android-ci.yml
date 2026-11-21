@@ -70,21 +70,21 @@ jobs:
         id: unit-test
         run: |
           set +e
-          gradle :app_mojo:testFullReleaseUnitTest --stacktrace --info > unit-test.log 2>&1
+          gradle --no-daemon :app_mojo:testFullReleaseUnitTest --stacktrace --info > unit-test.log 2>&1
           EXIT_CODE=$?
-          echo "GRADLE_EXIT=$EXIT_CODE" >> unit-test.log
+          {
+            echo "## Unit Test Gradle Output"
+            echo ""
+            echo '```'
+            cat unit-test.log 2>/dev/null || echo "(no log file)"
+            echo '```'
+            echo ""
+            echo "**Exit code:** $EXIT_CODE"
+          } >> $GITHUB_STEP_SUMMARY
           if [ $EXIT_CODE -ne 0 ]; then
             echo "::error::Unit tests failed with exit code $EXIT_CODE"
           fi
           exit $EXIT_CODE
-
-      - name: Show unit test log (debug)
-        if: always()
-        run: |
-          echo "=== unit-test.log exists? ==="
-          ls -la unit-test.log 2>/dev/null || echo "FILE NOT FOUND"
-          echo "=== unit-test.log content ==="
-          cat unit-test.log 2>/dev/null || echo "EMPTY OR MISSING"
 
       - name: Upload unit test debug log
         if: always()
@@ -98,9 +98,17 @@ jobs:
         id: lint
         run: |
           set +e
-          gradle :app_mojo:lintFullRelease --stacktrace --info > lint.log 2>&1
+          gradle --no-daemon :app_mojo:lintFullRelease --stacktrace --info > lint.log 2>&1
           EXIT_CODE=$?
-          echo "GRADLE_EXIT=$EXIT_CODE" >> lint.log
+          {
+            echo "## Lint Gradle Output"
+            echo ""
+            echo '```'
+            cat lint.log 2>/dev/null || echo "(no log file)"
+            echo '```'
+            echo ""
+            echo "**Exit code:** $EXIT_CODE"
+          } >> $GITHUB_STEP_SUMMARY
           if [ $EXIT_CODE -ne 0 ]; then
             echo "::error::Lint failed with exit code $EXIT_CODE"
           fi
@@ -118,9 +126,17 @@ jobs:
         id: assemble
         run: |
           set +e
-          gradle :app_mojo:assembleFullRelease --stacktrace --info > assemble.log 2>&1
+          gradle --no-daemon :app_mojo:assembleFullRelease --stacktrace --info > assemble.log 2>&1
           EXIT_CODE=$?
-          echo "GRADLE_EXIT=$EXIT_CODE" >> assemble.log
+          {
+            echo "## Assemble Gradle Output"
+            echo ""
+            echo '```'
+            cat assemble.log 2>/dev/null || echo "(no log file)"
+            echo '```'
+            echo ""
+            echo "**Exit code:** $EXIT_CODE"
+          } >> $GITHUB_STEP_SUMMARY
           if [ $EXIT_CODE -ne 0 ]; then
             echo "::error::Assemble failed with exit code $EXIT_CODE"
           fi
@@ -133,10 +149,6 @@ jobs:
           name: assemble-debug-log
           path: assemble.log
           retention-days: 3
-
-      - name: Assemble Full Release APK
-        id: assemble
-        run: gradle :app_mojo:assembleFullRelease --stacktrace --info || (echo "=== ASSEMBLE FAILED ==="; exit 1)
 
       - name: Upload unit test reports
         if: always()
@@ -222,7 +234,7 @@ jobs:
           RAUFIXTEAM_KEYSTORE_PASSWORD: ${{ secrets.RAUFIXTEAM_KEYSTORE_PASSWORD }}
           RAUFIXTEAM_KEY_ALIAS: ${{ secrets.RAUFIXTEAM_KEY_ALIAS }}
           RAUFIXTEAM_KEY_PASSWORD: ${{ secrets.RAUFIXTEAM_KEY_PASSWORD }}
-        run: gradle :app_mojo:assembleFullRelease
+        run: gradle --no-daemon :app_mojo:assembleFullRelease
 
       - name: Wipe temporary keystore
         if: always()
