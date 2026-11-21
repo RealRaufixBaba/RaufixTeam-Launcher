@@ -68,10 +68,18 @@ jobs:
 
       - name: Unit tests (Full Release)
         id: unit-test
-        run: gradle :app_mojo:testFullReleaseUnitTest --stacktrace --info 2>&1 | tee unit-test.log || (echo "=== UNIT TEST FAILED ==="; exit 1)
+        run: |
+          set +e
+          gradle :app_mojo:testFullReleaseUnitTest --stacktrace --info > unit-test.log 2>&1
+          EXIT_CODE=$?
+          echo "GRADLE_EXIT=$EXIT_CODE" >> unit-test.log
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "::error::Unit tests failed with exit code $EXIT_CODE"
+          fi
+          exit $EXIT_CODE
 
       - name: Upload unit test debug log
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: unit-test-debug-log
@@ -80,7 +88,43 @@ jobs:
 
       - name: Lint (Full Release)
         id: lint
-        run: gradle :app_mojo:lintFullRelease --stacktrace --info || (echo "=== LINT FAILED ==="; exit 1)
+        run: |
+          set +e
+          gradle :app_mojo:lintFullRelease --stacktrace --info > lint.log 2>&1
+          EXIT_CODE=$?
+          echo "GRADLE_EXIT=$EXIT_CODE" >> lint.log
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "::error::Lint failed with exit code $EXIT_CODE"
+          fi
+          exit $EXIT_CODE
+
+      - name: Upload lint debug log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-debug-log
+          path: lint.log
+          retention-days: 3
+
+      - name: Assemble Full Release APK
+        id: assemble
+        run: |
+          set +e
+          gradle :app_mojo:assembleFullRelease --stacktrace --info > assemble.log 2>&1
+          EXIT_CODE=$?
+          echo "GRADLE_EXIT=$EXIT_CODE" >> assemble.log
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "::error::Assemble failed with exit code $EXIT_CODE"
+          fi
+          exit $EXIT_CODE
+
+      - name: Upload assemble debug log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: assemble-debug-log
+          path: assemble.log
+          retention-days: 3
 
       - name: Assemble Full Release APK
         id: assemble
