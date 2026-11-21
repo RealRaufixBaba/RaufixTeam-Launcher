@@ -204,7 +204,7 @@ class AssetTaskRegistrar {
 
     def setVariant(variant) {
         def flavorName = variant.productFlavors.empty ? "" : variant.productFlavors[0].name.toString()
-        def buildTypeName = variant.buildType.name.toString()
+        def buildTypeName = variant.buildType.name.toString().capitalize()
         def variantNameRaw = (flavorName + buildTypeName)
         variantName = variantNameRaw.capitalize()
         mergeAssetsTask = variant.getPreBuildProvider().get()
