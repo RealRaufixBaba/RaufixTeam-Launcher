@@ -60,11 +60,16 @@ jobs:
       - name: Assemble Full Release APK
         run: |
           set +e
-          timeout 1800 gradle --no-daemon --max-workers=1 :app_mojo:assembleFullRelease --stacktrace > assemble.log 2>&1
+          timeout 1800 gradle --no-daemon --max-workers=1 :app_mojo:assembleFullRelease --stacktrace --info > assemble.log 2>&1
           EXIT_CODE=$?
-          # Echo first 200 lines as error annotations
-          head -200 assemble.log 2>/dev/null | while IFS= read -r line; do echo "::error::[ASSEMBLE] $line"; done
+          # Echo error lines and surrounding context as annotations
+          grep -n -iE "error|fail|exception|caused by|could not|unable|timeout|What went wrong|where|Execution failed|settings file|build file" assemble.log 2>/dev/null | head -30 | while IFS= read -r line; do echo "::error::[ASSEMBLE] $line"; done
           echo "::error::Assemble exit code: $EXIT_CODE"
+          # Write full log to step summary
+          echo "## Assemble Log" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -100 assemble.log 2>/dev/null >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
           exit $EXIT_CODE
 
       - name: Upload assemble debug log
