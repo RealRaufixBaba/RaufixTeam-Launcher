@@ -58,7 +58,10 @@ jobs:
         run: chmod +x gradlew
 
       - name: Gradle wrapper validation
-        run: ./gradlew --version
+        run: |
+          java -version
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          ./gradlew --version --stacktrace --info
 
       - name: Unit tests (Full Release)
         id: unit-test
