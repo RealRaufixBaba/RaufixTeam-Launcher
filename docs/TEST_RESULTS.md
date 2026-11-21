@@ -60,3 +60,14 @@ The following checks were executed with the available tooling (Python/Node/grep)
 ## Release gate
 
 Per the final delivery gate, release is **BLOCKED** until: identity/version (1.0.0), original icon/theme, no-ads audit, licence attribution, Modrinth+CurseForge flows, mod lifecycle, two genuine new renderers, and evidenced FPS benchmark are accepted — all requiring a device-verified build that this sandbox cannot produce.
+
+## Unblock path (no build claimed yet)
+
+The repository is now CI-ready so the build can be executed outside this sandbox:
+
+- **Gradle wrapper** added (`gradlew`, `gradle/wrapper/gradle-wrapper.properties` → Gradle 8.14.5). `./gradlew` auto-downloads the Gradle distribution on first run.
+- **Four missing submodules added** (`glfw`, `mojoexec`, `sdl`/MojoSDL, `NoBlocklist`) at their upstream commits, providing `:glfw:jni_bindings`, `:mojoexec:jni_bindings`, `:sdl:jni_bindings` and `:NoBlocklist`.
+- **GitHub Actions workflow** added at `.github/workflows/android-ci.yml`:
+  - `build-test` job: JDK 17 → Android SDK Platform 36 → NDK 29.0.14206865 → `:app_mojo:testFullReleaseUnitTest` → `:app_mojo:lintFullRelease` → `:app_mojo:assembleFullRelease`, uploading test reports, lint reports, and the release APK artifact.
+  - `sign-release` job: triggers on `v*` tag push, signs the release APK when `RAUFIXTEAM_*` secrets are configured.
+- **Still required to unblock:** run the `build-test` workflow on GitHub Actions (or locally on a PC with JDK 17 + Android SDK Platform 36 + NDK 29.0.14206865), then execute the device tests (2 renderers, recording RFX-181–200, A/B FPS RFX-101–105) and write evidenced results here. Nothing in this section is a PASS — every category above remains `NOT RUN` until executed with evidence.

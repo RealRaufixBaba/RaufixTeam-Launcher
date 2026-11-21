@@ -1,0 +1,264 @@
+name: Build & Test RaufixTeam Launcher V1
+
+on:
+  push:
+    branches: [ main, "arena/**" ]
+    tags: [ "v*" ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GRADLE_VERSION: 8.14.5
+  NDK_VERSION: 29.0.14206865
+  JAVA_VERSION: 17
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+
+      - name: Install Android SDK command-line tools
+        run: |
+          mkdir -p $HOME/android-sdk/cmdline-tools
+          cd $HOME/android-sdk
+          curl -sL -o sdk-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -o -q sdk-tools.zip -d cmdline-tools
+          mv cmdline-tools/cmdline-tools cmdline-tools/latest
+          echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> $GITHUB_ENV
+          echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
+          echo "PATH=$HOME/android-sdk/cmdline-tools/latest/bin:$PATH" >> $GITHUB_ENV
+
+      - name: Install Android SDK packages (platform 36, NDK, build-tools, cmake)
+        run: |
+          yes | sdkmanager --sdk_root=$ANDROID_SDK_ROOT "platform-tools" "platforms;android-36" "build-tools;36.0.0" "ndk;${{ env.NDK_VERSION }}" "cmake;3.22.1"
+
+      - name: Write local.properties
+        run: |
+          echo "sdk.dir=${ANDROID_SDK_ROOT}" > local.properties
+          echo "ndk.dir=${ANDROID_SDK_ROOT}/ndk/${{ env.NDK_VERSION }}" >> local.properties
+          cat local.properties
+
+      - name: Install Gradle from GitHub releases
+        run: |
+          cd $HOME
+          curl -sL -o gradle-bin.zip "https://github.com/gradle/gradle-distributions/releases/download/v${GRADLE_VERSION}/gradle-${GRADLE_VERSION}-bin.zip"
+          unzip -q gradle-bin.zip
+          echo "GRADLE_HOME=$HOME/gradle-${GRADLE_VERSION}" >> $GITHUB_ENV
+          echo "$HOME/gradle-${GRADLE_VERSION}/bin" >> $GITHUB_PATH
+
+      - name: Gradle version check
+        run: gradle --version
+
+      - name: Debug: list Gradle subprojects
+        run: |
+          set +e
+          gradle :app_mojo:projects --console=plain > gradle-projects.log 2>&1
+          echo "EXIT_CODE=$?" >> gradle-projects.log
+          cat gradle-projects.log
+          echo "::notice::Gradle projects log captured above"
+
+      - name: Debug: list submodule contents
+        run: |
+          echo "=== NoBlocklist ==="; ls NoBlocklist/ 2>/dev/null
+          echo "=== glfw/jni_bindings ==="; ls glfw/jni_bindings/ 2>/dev/null
+          echo "=== sdl/jni_bindings ==="; ls sdl/jni_bindings/ 2>/dev/null
+          echo "=== mojoexec/jni_bindings ==="; ls mojoexec/jni_bindings/ 2>/dev/null
+
+      - name: Unit tests (Full Release)
+        id: unit-test
+        run: |
+          set +e
+          gradle --no-daemon :app_mojo:testFullReleaseUnitTest --stacktrace --info > unit-test.log 2>&1
+          EXIT_CODE=$?
+          {
+            echo "## Unit Test Gradle Output"
+            echo ""
+            echo '```'
+            cat unit-test.log 2>/dev/null || echo "(no log file)"
+            echo '```'
+            echo ""
+            echo "**Exit code:** $EXIT_CODE"
+          } >> $GITHUB_STEP_SUMMARY
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "::error::Unit tests failed with exit code $EXIT_CODE"
+          fi
+          exit $EXIT_CODE
+
+      - name: Upload unit test debug log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-debug-log
+          path: unit-test.log
+          retention-days: 3
+
+      - name: Lint (Full Release)
+        id: lint
+        run: |
+          set +e
+          gradle --no-daemon :app_mojo:lintFullRelease --stacktrace --info > lint.log 2>&1
+          EXIT_CODE=$?
+          {
+            echo "## Lint Gradle Output"
+            echo ""
+            echo '```'
+            cat lint.log 2>/dev/null || echo "(no log file)"
+            echo '```'
+            echo ""
+            echo "**Exit code:** $EXIT_CODE"
+          } >> $GITHUB_STEP_SUMMARY
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "::error::Lint failed with exit code $EXIT_CODE"
+          fi
+          exit $EXIT_CODE
+
+      - name: Upload lint debug log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-debug-log
+          path: lint.log
+          retention-days: 3
+
+      - name: Assemble Full Release APK
+        id: assemble
+        run: |
+          set +e
+          gradle --no-daemon :app_mojo:assembleFullRelease --stacktrace --info > assemble.log 2>&1
+          EXIT_CODE=$?
+          {
+            echo "## Assemble Gradle Output"
+            echo ""
+            echo '```'
+            cat assemble.log 2>/dev/null || echo "(no log file)"
+            echo '```'
+            echo ""
+            echo "**Exit code:** $EXIT_CODE"
+          } >> $GITHUB_STEP_SUMMARY
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "::error::Assemble failed with exit code $EXIT_CODE"
+          fi
+          exit $EXIT_CODE
+
+      - name: Upload assemble debug log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: assemble-debug-log
+          path: assemble.log
+          retention-days: 3
+
+      - name: Upload unit test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-reports
+          path: app_mojo/build/reports/tests/testFullReleaseUnitTest/
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: Upload lint reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-reports
+          path: app_mojo/build/reports/lints/
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: Upload release APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: raufixteam-launcher-full-release-apk
+          path: app_mojo/build/outputs/apk/full/release/*.apk
+          retention-days: 30
+
+  sign-release:
+    needs: build-test
+    if: startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Install Android SDK command-line tools
+        run: |
+          mkdir -p $HOME/android-sdk/cmdline-tools
+          cd $HOME/android-sdk
+          curl -sL -o sdk-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -o -q sdk-tools.zip -d cmdline-tools
+          mv cmdline-tools/cmdline-tools cmdline-tools/latest
+          echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> $GITHUB_ENV
+          echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
+          echo "PATH=$HOME/android-sdk/cmdline-tools/latest/bin:$PATH" >> $GITHUB_ENV
+
+      - name: Install Android SDK packages (platform 36, NDK, build-tools, cmake)
+        run: |
+          yes | sdkmanager --sdk_root=$ANDROID_SDK_ROOT "platform-tools" "platforms;android-36" "build-tools;36.0.0" "ndk;${{ env.NDK_VERSION }}" "cmake;3.22.1"
+
+      - name: Write local.properties
+        run: |
+          echo "sdk.dir=${ANDROID_SDK_ROOT}" > local.properties
+          echo "ndk.dir=${ANDROID_SDK_ROOT}/ndk/${{ env.NDK_VERSION }}" >> local.properties
+
+      - name: Install Gradle from GitHub releases
+        run: |
+          cd $HOME
+          curl -sL -o gradle-bin.zip "https://github.com/gradle/gradle-distributions/releases/download/v${GRADLE_VERSION}/gradle-${GRADLE_VERSION}-bin.zip"
+          unzip -q gradle-bin.zip
+          echo "GRADLE_HOME=$HOME/gradle-${GRADLE_VERSION}" >> $GITHUB_ENV
+          echo "$HOME/gradle-${GRADLE_VERSION}/bin" >> $GITHUB_PATH
+
+      - name: Decode release keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.RAUFIXTEAM_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > release.keystore
+            echo "RAUFIXTEAM_KEYSTORE_PATH=$(pwd)/release.keystore" >> $GITHUB_ENV
+          fi
+
+      - name: Assemble & sign Full Release
+        env:
+          RAUFIXTEAM_KEYSTORE_PASSWORD: ${{ secrets.RAUFIXTEAM_KEYSTORE_PASSWORD }}
+          RAUFIXTEAM_KEY_ALIAS: ${{ secrets.RAUFIXTEAM_KEY_ALIAS }}
+          RAUFIXTEAM_KEY_PASSWORD: ${{ secrets.RAUFIXTEAM_KEY_PASSWORD }}
+        run: gradle --no-daemon :app_mojo:assembleFullRelease
+
+      - name: Wipe temporary keystore
+        if: always()
+        run: rm -f release.keystore
+
+      - name: Upload signed APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: raufixteam-launcher-signed-apk
+          path: app_mojo/build/outputs/apk/full/release/*.apk
+          retention-days: 30
