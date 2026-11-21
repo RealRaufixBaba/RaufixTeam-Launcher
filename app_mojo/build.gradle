@@ -203,14 +203,14 @@ class AssetTaskRegistrar {
     }
 
     def setVariant(variant) {
-        def variantNameValue = variant.name.toString().capitalize()
-        variantName = variantNameValue
+        def variantNameRaw = variant.name.toString()
+        variantName = variantNameRaw.capitalize()
         mergeAssetsTask = variant.getPreBuildProvider().get()
 
-        targetAssetsDir = new File(project.projectDir, "build/intermediates/remote_asset_set/${variantName.toLowerCase()}/")
+        targetAssetsDir = new File(project.projectDir, "build/intermediates/remote_asset_set/${variantNameRaw.toLowerCase()}/")
         createDirectories(targetAssetsDir)
 
-        project.android.sourceSets[variantName].assets.srcDirs += targetAssetsDir.absolutePath
+        project.android.sourceSets[variantNameRaw].assets.srcDirs += targetAssetsDir.absolutePath
     }
 
     static def createDirectories(File location) {
