@@ -193,6 +193,8 @@ class AssetTaskRegistrar {
     private File targetDownloadDir
     private File projectJarDir
 
+    String getRegVariantName() { return regVariantName }
+
     AssetTaskRegistrar(Project project) {
         this.project = project
 
@@ -337,7 +339,7 @@ afterEvaluate {
     android.applicationVariants.configureEach { variant ->
         try {
             registrar.setVariant(variant)
-            println "::error::[BUILD_DEBUG] 9 after setVariant: regVariantName=$regVariantName"
+            println "::error::[BUILD_DEBUG] 9 after setVariant: regVariantName=" + registrar.getRegVariantName()
 
             registrar.projectJarDependency project(":forge_installer"), "components/forge_installer"
             println "::error::[BUILD_DEBUG] 10 forge_installer ok"
