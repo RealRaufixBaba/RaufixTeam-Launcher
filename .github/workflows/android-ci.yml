@@ -63,13 +63,14 @@ jobs:
           echo "=== GRADLE VERSION ==="
           gradle --version 2>&1 | head -20
           echo "=== STARTING ASSEMBLE ==="
-          timeout 1800 gradle --no-daemon --max-workers=1 :app_mojo:assembleFullRelease --stacktrace --info 2>&1 | tee assemble.log
+          timeout 1800 gradle --no-daemon --max-workers=1 :app_mojo:assembleFullRelease --stacktrace 2>&1 | tee assemble.log
           EXIT_CODE=${PIPESTATUS[0]}
           echo "::error::Assemble exit code: $EXIT_CODE"
           if [ -f assemble.log ]; then
-            while IFS= read -r line; do
+            echo "::error::=== LAST 30 LINES OF ASSEMBLE LOG ==="
+            tail -30 assemble.log 2>/dev/null | while IFS= read -r line; do
               echo "::error::${line}"
-            done < <(tail -80 assemble.log 2>/dev/null)
+            done
           fi
           {
             echo "## Assemble Output"
