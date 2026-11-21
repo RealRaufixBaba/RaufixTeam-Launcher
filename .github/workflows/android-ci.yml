@@ -60,6 +60,7 @@ jobs:
       - name: Assemble Full Release APK
         run: |
           set +e
+          set -x
           timeout 1800 gradle --no-daemon --max-workers=1 :app_mojo:assembleFullRelease --stacktrace 2>&1 | tee assemble.log
           EXIT_CODE=${PIPESTATUS[0]}
           echo "::error::Assemble exit code: $EXIT_CODE"
