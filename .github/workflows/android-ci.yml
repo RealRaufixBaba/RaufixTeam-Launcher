@@ -59,7 +59,26 @@ jobs:
 
       - name: Assemble Full Release APK
         run: |
-          timeout 1800 gradle --no-daemon --max-workers=1 :app_mojo:assembleFullRelease --stacktrace
+          set +e
+          timeout 1800 gradle --no-daemon --max-workers=1 :app_mojo:assembleFullRelease --stacktrace 2>&1 | tee assemble.log
+          EXIT_CODE=${PIPESTATUS[0]}
+          echo "::error::Assemble exit code: $EXIT_CODE"
+          if [ -f assemble.log ] && [ -s assemble.log ]; then
+            echo "::error::=== ASSEMBLE LOG (last 40 lines) ==="
+            tail -40 assemble.log | while IFS= read -r line; do
+              echo "::error::${line}"
+            done
+          else
+            echo "::error::=== ASSEMBLE LOG IS EMPTY OR MISSING ==="
+          fi
+          {
+            echo "## Assemble Output"
+            echo ""
+            echo '```'
+            tail -100 assemble.log 2>/dev/null
+            echo '```'
+          } >> $GITHUB_STEP_SUMMARY
+          exit $EXIT_CODE
           exit $EXIT_CODE
 
       - name: Upload assemble debug log
