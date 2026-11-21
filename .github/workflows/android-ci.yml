@@ -59,7 +59,12 @@ jobs:
 
       - name: Assemble Full Release APK
         run: |
-          timeout 1800 gradle --no-daemon --max-workers=1 :app_mojo:assembleFullRelease --stacktrace
+          set +e
+          timeout 1800 gradle --no-daemon --max-workers=1 :app_mojo:assembleFullRelease --stacktrace > assemble.log 2>&1
+          EXIT_CODE=$?
+          grep -n -iE "error:|failed|exception|caused by|could not|unable|What went wrong|Execution failed|unknown property|MissingProperty|Build failed" assemble.log 2>/dev/null | head -20 | while IFS= read -r line; do echo "::error::[ASSEMBLE] $line"; done
+          echo "::error::Assemble exit code: $EXIT_CODE"
+          exit $EXIT_CODE
 
       - name: Upload assemble debug log
         if: always()
