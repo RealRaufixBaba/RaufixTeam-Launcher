@@ -207,13 +207,7 @@ class AssetTaskRegistrar {
         def buildTypeName = variant.buildType.name.toString().capitalize()
         def variantNameRaw = (flavorName + buildTypeName)
         variantName = variantNameRaw.capitalize()
-        println "::error::[DEBUG_VARIANT] name=$variantName raw=$variantNameRaw flavor=$flavorName buildType=$buildTypeName"
-        try {
-            mergeAssetsTask = project.tasks.named("pre${variantName}Build").get()
-        } catch (Exception e) {
-            println "::error::[DEBUG_TASK_ERROR] variant=$variantName taskName=pre${variantName}Build error=${e.message}"
-            throw e
-        }
+        mergeAssetsTask = project.tasks.named("pre${variantName}Build").get()
 
         targetAssetsDir = new File(project.projectDir, "build/intermediates/remote_asset_set/${variantNameRaw.toLowerCase()}/")
         createDirectories(targetAssetsDir)
@@ -311,29 +305,21 @@ afterEvaluate {
 
     android.applicationVariants.configureEach { variant ->
         registrar.setVariant(variant)
-        println "::error::[DEBUG_AFTER_SET] variant=$variantName"
 
         registrar.projectJarDependency project(":forge_installer"), "components/forge_installer"
-        println "::error::[DEBUG_AFTER_FORGE] variant=$variantName"
-
         registrar.projectJarDependency project(":NoBlocklist"), "components/noblocklist"
-        println "::error::[DEBUG_AFTER_NOBLOCK] variant=$variantName"
 
         def flavorName = variant.productFlavors.empty ? "" : variant.productFlavors[0].name.toString()
         if (flavorName.toLowerCase().contains("full")) {
             registrar.jreRuntimeDependency 8, "components/jre"
         }
-        println "::error::[DEBUG_AFTER_JRE] variant=$variantName"
 
         def cacioJarUrl = "https://jitpack.io/com/github/MojoLauncher/%1\\$s/%2\\$s/%3\\$s/%2\\$s-%3\\$s%4\\$s.jar"
 
         registrar.onlineJarDependency cacioJarUrl, "caciocavallo", "cacio-shared", "d0efb5aaba", "", "components/caciocavallo"
-        println "::error::[DEBUG_AFTER_CACIO_SHARED] variant=$variantName"
         registrar.onlineJarDependency cacioJarUrl, "caciocavallo", "cacio-androidnw", "d0efb5aaba", "", "components/caciocavallo"
-        println "::error::[DEBUG_AFTER_CACIO_ANDROIDNW] variant=$variantName"
 
         registrar.onlineJarDependency cacioJarUrl, "caciocavallo17", "cacio-tta", "-411454b006-1", "-jar-with-dependencies", "components/caciocavallo17"
-        println "::error::[DEBUG_AFTER_CACIO_TTA] variant=$variantName"
     }
 }
 
