@@ -13,6 +13,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  GRADLE_VERSION: 8.14.5
   NDK_VERSION: 29.0.14206865
   JAVA_VERSION: 17
 
@@ -54,26 +55,28 @@ jobs:
           echo "ndk.dir=${ANDROID_SDK_ROOT}/ndk/${{ env.NDK_VERSION }}" >> local.properties
           cat local.properties
 
-      - name: Make gradlew executable
-        run: chmod +x gradlew
-
-      - name: Gradle wrapper validation
+      - name: Install Gradle from GitHub releases
         run: |
-          java -version
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          ./gradlew --version --stacktrace --info
+          cd $HOME
+          curl -sL -o gradle-bin.zip "https://github.com/gradle/gradle-distributions/releases/download/v${GRADLE_VERSION}/gradle-${GRADLE_VERSION}-bin.zip"
+          unzip -q gradle-bin.zip
+          echo "GRADLE_HOME=$HOME/gradle-${GRADLE_VERSION}" >> $GITHUB_ENV
+          echo "$HOME/gradle-${GRADLE_VERSION}/bin" >> $GITHUB_PATH
+
+      - name: Gradle version check
+        run: gradle --version
 
       - name: Unit tests (Full Release)
         id: unit-test
-        run: ./gradlew :app_mojo:testFullReleaseUnitTest
+        run: gradle :app_mojo:testFullReleaseUnitTest
 
       - name: Lint (Full Release)
         id: lint
-        run: ./gradlew :app_mojo:lintFullRelease
+        run: gradle :app_mojo:lintFullRelease
 
       - name: Assemble Full Release APK
         id: assemble
-        run: ./gradlew :app_mojo:assembleFullRelease
+        run: gradle :app_mojo:assembleFullRelease
 
       - name: Upload unit test reports
         if: always()
@@ -137,8 +140,13 @@ jobs:
           echo "sdk.dir=${ANDROID_SDK_ROOT}" > local.properties
           echo "ndk.dir=${ANDROID_SDK_ROOT}/ndk/${{ env.NDK_VERSION }}" >> local.properties
 
-      - name: Make gradlew executable
-        run: chmod +x gradlew
+      - name: Install Gradle from GitHub releases
+        run: |
+          cd $HOME
+          curl -sL -o gradle-bin.zip "https://github.com/gradle/gradle-distributions/releases/download/v${GRADLE_VERSION}/gradle-${GRADLE_VERSION}-bin.zip"
+          unzip -q gradle-bin.zip
+          echo "GRADLE_HOME=$HOME/gradle-${GRADLE_VERSION}" >> $GITHUB_ENV
+          echo "$HOME/gradle-${GRADLE_VERSION}/bin" >> $GITHUB_PATH
 
       - name: Decode release keystore
         env:
@@ -154,7 +162,7 @@ jobs:
           RAUFIXTEAM_KEYSTORE_PASSWORD: ${{ secrets.RAUFIXTEAM_KEYSTORE_PASSWORD }}
           RAUFIXTEAM_KEY_ALIAS: ${{ secrets.RAUFIXTEAM_KEY_ALIAS }}
           RAUFIXTEAM_KEY_PASSWORD: ${{ secrets.RAUFIXTEAM_KEY_PASSWORD }}
-        run: ./gradlew :app_mojo:assembleFullRelease
+        run: gradle :app_mojo:assembleFullRelease
 
       - name: Wipe temporary keystore
         if: always()
