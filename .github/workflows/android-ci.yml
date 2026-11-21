@@ -59,12 +59,7 @@ jobs:
 
       - name: Assemble Full Release APK
         run: |
-          set +e
-          timeout 1800 gradle --no-daemon --max-workers=1 :app_mojo:assembleFullRelease --stacktrace > assemble.log 2>&1
-          EXIT_CODE=$?
-          cat assemble.log 2>/dev/null | sed 's/^/::error::[ASSEMBLE] /' | head -150
-          echo "::error::Assemble exit code: $EXIT_CODE"
-          exit $EXIT_CODE
+          timeout 1800 gradle --no-daemon --max-workers=1 :app_mojo:assembleFullRelease --stacktrace
 
       - name: Upload assemble debug log
         if: always()
